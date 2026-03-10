@@ -1,0 +1,24 @@
+Collecting cairosvg
+  Downloading cairosvg-2.8.2-py3-none-any.whl.metadata (2.7 kB)
+Collecting cairocffi (from cairosvg)
+  Downloading cairocffi-1.7.1-py3-none-any.whl.metadata (3.3 kB)
+Collecting cssselect2 (from cairosvg)
+  Downloading cssselect2-0.9.0-py3-none-any.whl.metadata (2.9 kB)
+Collecting defusedxml (from cairosvg)
+  Downloading defusedxml-0.7.1-py2.py3-none-any.whl.metadata (32 kB)
+Requirement already satisfied: pillow in ./.venv/lib/python3.14/site-packages (from cairosvg) (12.1.1)
+Collecting tinycss2 (from cairosvg)
+  Downloading tinycss2-1.5.1-py3-none-any.whl.metadata (3.0 kB)
+Requirement already satisfied: cffi>=1.1.0 in ./.venv/lib/python3.14/site-packages (from cairocffi->cairosvg) (2.0.0)
+Requirement already satisfied: pycparser in ./.venv/lib/python3.14/site-packages (from cffi>=1.1.0->cairocffi->cairosvg) (3.0)
+Collecting webencodings (from cssselect2->cairosvg)
+  Downloading webencodings-0.5.1-py2.py3-none-any.whl.metadata (2.1 kB)
+Downloading cairosvg-2.8.2-py3-none-any.whl (45 kB)
+Downloading cairocffi-1.7.1-py3-none-any.whl (75 kB)
+Downloading cssselect2-0.9.0-py3-none-any.whl (15 kB)
+Downloading defusedxml-0.7.1-py2.py3-none-any.whl (25 kB)
+Downloading tinycss2-1.5.1-py3-none-any.whl (28 kB)
+Downloading webencodings-0.5.1-py2.py3-none-any.whl (11 kB)
+Installing collected packages: webencodings, tinycss2, defusedxml, cssselect2, cairocffi, cairosvg
+
+Successfully installed cairocffi-1.7.1 cairosvg-2.8.2 cssselect2-0.9.0 defusedxml-0.7.1 tinycss2-1.5.1 webencodings-0.5.1

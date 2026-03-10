@@ -61,7 +61,9 @@ A macOS app bundle has been created for easy installation.
 2. Copy `UniFi Analyzer.app` to your `/Applications/` folder.
 3. Double-click `UniFi Analyzer.app` to launch the application. It will start the web server and open your browser to `http://localhost:8080`.
 
-   The app features a custom network-themed icon showing a router with antennas, WiFi signals, and network cables.
+   The app features a custom network connections map icon showing interconnected devices, routers, and data flows - designed to fill the entire icon space for maximum visibility in the macOS dock and toolbar.
+
+   **Note**: The Mac app now opens a status window that stays visible in your dock. You can use this window to monitor the server status and quit the application when you're done. Closing this window will stop the server.
 
 > **To rebuild the Mac app with the latest changes:**
 > ```bash

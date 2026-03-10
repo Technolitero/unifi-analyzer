@@ -1,5 +1,5 @@
-('/Users/buddy/Documents/GitHub/unifi-analyzer/build/UniFi Analyzer/UniFi '
- 'Analyzer.pkg',
+('/Users/buddy/Documents/GitHub/unifi-analyzer/foundry/build/UniFi '
+ 'Analyzer/UniFi Analyzer.pkg',
  {'BINARY': True,
   'DATA': True,
   'EXECUTABLE': True,
@@ -11,7 +11,7 @@
   'SYMLINK': False},
  [('pyi-contents-directory _internal', '', 'OPTION'),
   ('PYZ-00.pyz',
-   '/Users/buddy/Documents/GitHub/unifi-analyzer/build/UniFi '
+   '/Users/buddy/Documents/GitHub/unifi-analyzer/foundry/build/UniFi '
    'Analyzer/PYZ-00.pyz',
    'PYZ'),
   ('python3.14/lib-dynload/_struct.cpython-314-darwin.so',
@@ -21,19 +21,19 @@
    '/usr/local/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/lib-dynload/zlib.cpython-314-darwin.so',
    'EXTENSION'),
   ('struct',
-   '/Users/buddy/Documents/GitHub/unifi-analyzer/build/UniFi '
+   '/Users/buddy/Documents/GitHub/unifi-analyzer/foundry/build/UniFi '
    'Analyzer/localpycs/struct.pyc',
    'PYMODULE'),
   ('pyimod01_archive',
-   '/Users/buddy/Documents/GitHub/unifi-analyzer/build/UniFi '
+   '/Users/buddy/Documents/GitHub/unifi-analyzer/foundry/build/UniFi '
    'Analyzer/localpycs/pyimod01_archive.pyc',
    'PYMODULE'),
   ('pyimod02_importers',
-   '/Users/buddy/Documents/GitHub/unifi-analyzer/build/UniFi '
+   '/Users/buddy/Documents/GitHub/unifi-analyzer/foundry/build/UniFi '
    'Analyzer/localpycs/pyimod02_importers.pyc',
    'PYMODULE'),
   ('pyimod03_ctypes',
-   '/Users/buddy/Documents/GitHub/unifi-analyzer/build/UniFi '
+   '/Users/buddy/Documents/GitHub/unifi-analyzer/foundry/build/UniFi '
    'Analyzer/localpycs/pyimod03_ctypes.pyc',
    'PYMODULE'),
   ('pyiboot01_bootstrap',
@@ -53,6 +53,9 @@
    'PYSOURCE'),
   ('pyi_rth_multiprocessing',
    '/Users/buddy/Documents/GitHub/unifi-analyzer/.venv/lib/python3.14/site-packages/PyInstaller/hooks/rthooks/pyi_rth_multiprocessing.py',
+   'PYSOURCE'),
+  ('pyi_rth__tkinter',
+   '/Users/buddy/Documents/GitHub/unifi-analyzer/.venv/lib/python3.14/site-packages/PyInstaller/hooks/rthooks/pyi_rth__tkinter.py',
    'PYSOURCE'),
   ('app_launcher',
    '/Users/buddy/Documents/GitHub/unifi-analyzer/app_launcher.py',
