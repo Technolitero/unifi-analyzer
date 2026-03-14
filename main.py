@@ -1077,7 +1077,7 @@ async def config_lookup_fetch(
         ],
         "clients": [
             {"hostname": c.get("hostname") or c.get("name"), "ip": c.get("ip"),
-             "mac": c.get("mac"), "network": c.get("network"), "oui": c.get("oui"),
+             "mac": c.get("mac"), "network": c.get("network"), "manufacturer": c.get("oui"),
              "is_wired": c.get("is_wired"), "uptime": c.get("uptime")}
             for c in clients_raw if isinstance(c, dict)
         ],
@@ -1299,7 +1299,7 @@ async def preview_export(job_id: str):
 
         clients_raw = _load("stat_sta.json")
         clients = [{"hostname": c.get("hostname") or c.get("name"), "ip": c.get("ip"),
-                    "mac": c.get("mac"), "network": c.get("network"), "oui": c.get("oui"),
+                    "mac": c.get("mac"), "network": c.get("network"), "manufacturer": c.get("oui"),
                     "is_wired": c.get("is_wired"), "uptime": c.get("uptime")} for c in clients_raw if isinstance(c, dict)]
 
         firewall = _build_firewall_rules(site_dir)

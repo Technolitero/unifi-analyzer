@@ -2417,8 +2417,9 @@ function _sortRows(rows, col, dir) {
 }
 
 function _buildTable(cols, rows, cellFn, sortCol, sortDir) {
+  const _labelMap = { ip: 'IP', mac: 'MAC', oui: 'OUI', is_wired: 'Connection', vlan_id: 'VLAN', poe: 'POE', manufacturer: 'Manufacturer', ssid: 'SSID', rx: 'RX', tx: 'TX', mtu: 'MTU', ttl: 'TTL' };
   const thCells = cols.map(c => {
-    const label = c.replace(/_/g, ' ');
+    const label = _labelMap[c] || c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     const isActive = c === sortCol;
     const arrow = isActive ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
     const style = isActive ? 'color:var(--accent);' : '';
@@ -2585,7 +2586,7 @@ function renderExportTable() {
     }, sortCol, sortDir);
 
   } else if (sec === 'clients') {
-    const cols = ['hostname', 'ip', 'mac', 'network', 'oui', 'is_wired', 'uptime'];
+    const cols = ['hostname', 'ip', 'mac', 'network', 'manufacturer', 'is_wired', 'uptime'];
     html = _buildTable(cols, rows, (c, v) => {
       if (c === 'is_wired') return `<td>${v === true || v === 'true' ? '<span class="badge badge-blue">Wired</span>' : '<span class="badge badge-yes">Wireless</span>'}</td>`;
       if (c === 'uptime') return `<td>${v != null ? _humanUptime(v) : '—'}</td>`;
@@ -2713,7 +2714,7 @@ function _getSectionConfig(sec, rawRows) {
                  return str(v);
                }};
     case 'clients':
-      return { cols: ['hostname', 'ip', 'mac', 'network', 'oui', 'is_wired', 'uptime'],
+      return { cols: ['hostname', 'ip', 'mac', 'network', 'manufacturer', 'is_wired', 'uptime'],
                transform: (c, v) => {
                  if (c === 'is_wired') return v === true || v === 'true' ? 'Wired' : 'Wireless';
                  if (c === 'uptime') return v != null ? _humanUptime(v) : '';

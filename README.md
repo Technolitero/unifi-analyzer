@@ -96,7 +96,7 @@ Click **Analyze Configuration** to connect to the controller and run a full insp
 **Summary tables shown after analysis:**
 
 - **Devices** — Name, IP, MAC, Type, Model, Firmware, Status, Mesh (APs with meshing enabled are flagged with a warning badge)
-- **Clients** — Hostname, IP, MAC, Wired/Wireless, Network, Signal, RX/TX
+- **Clients** — Hostname, IP, MAC, Manufacturer, Wired/Wireless, Network, Signal, RX/TX
 - **Networks** — Name, Purpose, Subnet, VLAN, Enabled
 - **WLANs** — SSID, Security, Band, VLAN, Hidden, Enabled
 
@@ -123,7 +123,7 @@ Click **Load Config** to fetch live configuration data from the controller. Data
 | **Port Profiles** | Name + all profile flag columns |
 | **Ports** | Device, Port, Name, Profile, Enabled, Status, Speed, Duplex, Media, POE |
 | **Devices** | Name, Model, IP, MAC, Type, State, Uptime |
-| **Clients** | Hostname, IP, MAC, Network, OUI, Connection, Uptime |
+| **Clients** | Hostname, IP, MAC, Network, Manufacturer, Connection, Uptime |
 
 #### Data Normalizations (applied in tables and exports)
 
