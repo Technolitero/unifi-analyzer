@@ -2778,10 +2778,22 @@ function _humanUptime(v) {
 }
 
 function _exportFilename(suffix) {
-  const host = (document.getElementById('creds-host') || {}).value || 'udm';
-  const safeHost = host.trim().replace(/[^a-zA-Z0-9._-]/g, '_') || 'udm';
+  // Prefer UDM device name from Devices tab data
+  let name = '';
+  if (_exportData && _exportSite) {
+    const devices = (_exportData.sites[_exportSite] || {}).devices || [];
+    const udm = devices.find(d => _isUdm(d.type));
+    if (udm && udm.name) name = udm.name;
+  }
+  // Fall back to interface list gateway name, then credentials host
+  if (!name && typeof allInterfaces !== 'undefined' && allInterfaces.length) {
+    const gw = allInterfaces.find(i => _isUdm(i.device_type));
+    if (gw && gw.device_name) name = gw.device_name;
+  }
+  if (!name) name = (document.getElementById('creds-host') || {}).value || 'udm';
+  const safeName = name.trim().replace(/[^a-zA-Z0-9._-]/g, '_') || 'udm';
   const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-').replace(/\./g, '-');
-  return `${safeHost}-${ts}${suffix ? '-' + suffix : ''}`;
+  return `${safeName}-${ts}${suffix ? '-' + suffix : ''}`;
 }
 
 function exportTableCSV() {
