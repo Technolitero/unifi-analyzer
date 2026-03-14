@@ -38,6 +38,7 @@ from config_export import run_export
 app = FastAPI(title="UniFi Analyzer", version="1.0.0")
 
 STATIC_DIR = Path(__file__).parent / "static"
+HISTORY_DIR = Path(__file__).parent / "history"
 
 # In-memory store for raw PCAP bytes — avoids base64 OOM in browser
 _pcap_cache: Dict[str, bytes] = {}
@@ -1428,4 +1429,300 @@ async def download_export_json(job_id: str):
         _stream(),
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="unifi_export_json.zip"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# History endpoints
+# ---------------------------------------------------------------------------
+
+from fastapi import UploadFile, File, Form as FormField
+
+@app.post("/api/history/save")
+async def history_save(
+    file: UploadFile = File(...),
+    udm_name: str = FormField(default="udm"),
+    site: str = FormField(default="default"),
+):
+    """Save a generated Excel file to the history directory."""
+    HISTORY_DIR.mkdir(exist_ok=True)
+    contents = await file.read()
+    # Sanitise and build filename
+    safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", udm_name) or "udm"
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    filename = f"{safe_name}-{ts}.xlsx"
+    filepath = HISTORY_DIR / filename
+    filepath.write_bytes(contents)
+    stat = filepath.stat()
+    return {
+        "filename": filename,
+        "saved_at": ts,
+        "size_bytes": stat.st_size,
+        "udm_name": udm_name,
+        "site": site,
+    }
+
+
+@app.get("/api/history")
+async def history_list():
+    """Return metadata for all saved history files."""
+    if not HISTORY_DIR.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(HISTORY_DIR.glob("*.xlsx"), key=lambda x: x.stat().st_mtime, reverse=True):
+        stat = f.stat()
+        from datetime import datetime
+        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        files.append({
+            "filename": f.name,
+            "saved_at": mtime,
+            "size_bytes": stat.st_size,
+        })
+    return {"files": files}
+
+
+@app.get("/api/history/download/{filename}")
+async def history_download(filename: str):
+    """Download a history file by name."""
+    # Prevent path traversal
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "_", filename)
+    filepath = HISTORY_DIR / safe
+    if not filepath.exists() or filepath.suffix != ".xlsx":
+        raise HTTPException(status_code=404, detail="File not found")
+    data = filepath.read_bytes()
+    async def _stream():
+        yield data
+    return StreamingResponse(
+        _stream(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{safe}"'},
+    )
+
+
+@app.delete("/api/history")
+async def history_delete(body: dict):
+    """Delete one or more history files by filename."""
+    filenames = body.get("filenames", [])
+    deleted, errors = [], []
+    for name in filenames:
+        safe = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
+        filepath = HISTORY_DIR / safe
+        if filepath.exists() and filepath.suffix == ".xlsx":
+            filepath.unlink()
+            deleted.append(safe)
+        else:
+            errors.append(safe)
+    return {"deleted": deleted, "errors": errors}
+
+
+@app.post("/api/history/download-zip")
+async def history_download_zip(body: dict):
+    """Return a zip archive containing one or more history files."""
+    filenames = body.get("filenames", [])
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in filenames:
+            safe = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
+            filepath = HISTORY_DIR / safe
+            if filepath.exists() and filepath.suffix == ".xlsx":
+                zf.write(filepath, safe)
+    buf.seek(0)
+
+    async def _stream():
+        yield buf.read()
+
+    return StreamingResponse(
+        _stream(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="history-export.zip"'},
+    )
+
+
+@app.post("/api/history/compare")
+async def history_compare(body: dict):
+    """
+    Compare selected history files against the most recent history file.
+
+    Summary sheet (pivoted): sections as rows, each compared file as a column.
+    One diff sheet per section that has any differences — columns are the data
+    fields plus one "vs {file}" status column per compared file.
+    Green = Added in latest (not in that older file), Red = Removed from latest,
+    Yellow = mixed across compared files.
+    """
+    import pandas as pd
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font
+    from datetime import datetime
+
+    filenames = body.get("filenames", [])
+    if not HISTORY_DIR.exists():
+        raise HTTPException(status_code=404, detail="No history files found")
+
+    all_files = sorted(HISTORY_DIR.glob("*.xlsx"), key=lambda x: x.stat().st_mtime, reverse=True)
+    if not all_files:
+        raise HTTPException(status_code=404, detail="No history files found")
+
+    latest_file   = all_files[0]
+    latest_xl     = pd.ExcelFile(latest_file)
+    latest_sheets = {s: latest_xl.parse(s) for s in latest_xl.sheet_names}
+
+    GREEN_FILL  = PatternFill("solid", fgColor="C6EFCE")   # Added (in latest, not compared)
+    RED_FILL    = PatternFill("solid", fgColor="FFC7CE")   # Removed (in compared, not latest)
+    YELLOW_FILL = PatternFill("solid", fgColor="FFEB9C")   # Mixed across compared files
+    HEADER_FILL = PatternFill("solid", fgColor="F97316")   # Orange header
+    WHITE_BOLD  = Font(bold=True, color="FFFFFF")
+
+    def make_short_name(fname: str) -> str:
+        base = fname.replace(".xlsx", "").replace("_", " ")
+        if len(base) <= 30:
+            return base
+        return base[:10] + "\u2026" + base[-19:]
+
+    # Build validated list of compared files (skip latest, skip invalid)
+    compared_files: list = []
+    short_names:    list = []
+    for fname in filenames:
+        safe = re.sub(r"[^a-zA-Z0-9._-]", "_", fname)
+        filepath = HISTORY_DIR / safe
+        if not filepath.exists() or filepath.suffix != ".xlsx":
+            continue
+        if filepath.resolve() == latest_file.resolve():
+            continue
+        compared_files.append(filepath)
+        short_names.append(make_short_name(safe))
+
+    wb = Workbook()
+    summary_ws = wb.active
+    summary_ws.title = "Summary"
+
+    # Early exit when nothing to compare
+    if not compared_files:
+        summary_ws.append(["No comparisons possible — all selected files are the latest version"])
+        for cell in summary_ws[1]:
+            cell.fill = HEADER_FILL
+            cell.font = WHITE_BOLD
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        async def _stream_empty():
+            yield buf.read()
+        return StreamingResponse(
+            _stream_empty(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="comparison-{ts}.xlsx"'},
+        )
+
+    # Parse all compared workbooks once before the section loop
+    compared_xl_list = []
+    for fp in compared_files:
+        cxl = pd.ExcelFile(fp)
+        compared_xl_list.append({s: cxl.parse(s) for s in cxl.sheet_names})
+
+    # Summary sheet — pivoted: rows = sections, columns = compared files
+    summary_ws.append(["Section"] + short_names)
+    for cell in summary_ws[1]:
+        cell.fill = HEADER_FILL
+        cell.font = WHITE_BOLD
+
+    n_files = len(compared_files)
+
+    for section_name in latest_xl.sheet_names:
+        latest_df = latest_sheets[section_name].astype(str)
+        data_cols = list(latest_df.columns)
+
+        file_added:   list = []
+        file_removed: list = []
+
+        for comp_sheets in compared_xl_list:
+            comp_df = comp_sheets.get(section_name, pd.DataFrame())
+            if comp_df.empty:
+                file_added.append(pd.DataFrame(columns=data_cols))
+                file_removed.append(pd.DataFrame(columns=data_cols))
+                continue
+            try:
+                # Normalise compared schema to match latest (handles added/removed columns)
+                comp_aligned = comp_df.astype(str).reindex(columns=data_cols, fill_value="")
+                merged  = pd.merge(latest_df, comp_aligned, how="outer", indicator=True)
+                added   = merged[merged["_merge"] == "left_only"].drop("_merge", axis=1)
+                removed = merged[merged["_merge"] == "right_only"].drop("_merge", axis=1)
+            except Exception:
+                added   = pd.DataFrame(columns=data_cols)
+                removed = pd.DataFrame(columns=data_cols)
+            file_added.append(added)
+            file_removed.append(removed)
+
+        # Build summary row for this section
+        summary_cells = [section_name]
+        for i in range(n_files):
+            n_a, n_r = len(file_added[i]), len(file_removed[i])
+            if not n_a and not n_r:
+                summary_cells.append("No changes")
+            else:
+                parts = []
+                if n_a: parts.append(f"{n_a} added")
+                if n_r: parts.append(f"{n_r} removed")
+                summary_cells.append(", ".join(parts))
+        summary_ws.append(summary_cells)
+
+        # Skip diff sheet if no differences exist for this section
+        if not any(len(file_added[i]) or len(file_removed[i]) for i in range(n_files)):
+            continue
+
+        # Collect deduplicated differing rows across all compared files
+        # diff_rows: {row_tuple: {file_idx: "Added" | "Removed"}}
+        diff_rows: dict = {}
+        for i in range(n_files):
+            for _, row in file_added[i].iterrows():
+                key = tuple(str(row.get(c, "")) for c in data_cols)
+                diff_rows.setdefault(key, {})[i] = "Added"
+            for _, row in file_removed[i].iterrows():
+                key = tuple(str(row.get(c, "")) for c in data_cols)
+                diff_rows.setdefault(key, {})[i] = "Removed"
+
+        # Create one diff sheet per section (names are all ≤17 chars — no truncation needed)
+        ws = wb.create_sheet(section_name[:31])
+        vs_headers = [f"vs {short_names[i]}" for i in range(n_files)]
+        ws.append(data_cols + vs_headers)
+        for cell in ws[1]:
+            cell.fill = HEADER_FILL
+            cell.font = WHITE_BOLD
+
+        for row_tuple, statuses in diff_rows.items():
+            vals = set(statuses.values())
+            if "Added" in vals and "Removed" in vals:
+                row_fill = YELLOW_FILL
+            elif "Added" in vals:
+                row_fill = GREEN_FILL
+            else:
+                row_fill = RED_FILL
+
+            status_cells = [statuses.get(i, "") for i in range(n_files)]
+            ws.append(list(row_tuple) + status_cells)
+            for cell in ws[ws.max_row]:
+                cell.fill = row_fill
+
+        for col in ws.columns:
+            max_len = max((len(str(cell.value or "")) for cell in col), default=8)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 60)
+
+    # Auto-fit summary sheet columns
+    for col in summary_ws.columns:
+        max_len = max((len(str(cell.value or "")) for cell in col), default=8)
+        summary_ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 60)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    report_name = f"comparison-{ts}.xlsx"
+
+    async def _stream():
+        yield buf.read()
+
+    return StreamingResponse(
+        _stream(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{report_name}"'},
     )

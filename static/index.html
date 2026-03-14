@@ -1179,6 +1179,7 @@
   <button class="tab-btn" data-tab="export">Config Lookup</button>
   <button class="tab-btn" data-tab="pcap">Interfaces</button>
   <button class="tab-btn" data-tab="viewer" id="viewerTabBtn" disabled>PCAP Viewer</button>
+  <button class="tab-btn" data-tab="history">History</button>
 </div>
 
 <!-- Device filter bar (shown after interface load) -->
@@ -1314,6 +1315,9 @@
     <div class="error-banner" id="pcapError" style="margin-top:4px"></div>
   </div>
 
+  <!-- History options (empty — actions are in the panel) -->
+  <div class="tab-opts" id="opts-history"></div>
+
   <!-- PCAP Viewer options -->
   <div class="tab-opts" id="opts-viewer">
     <span class="badge-count" id="pcapSize" style="flex-shrink:0"></span>
@@ -1426,6 +1430,10 @@
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
             Export All to Excel
           </button>
+          <button onclick="saveToHistory()" id="saveHistoryBtn" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:#a78bfa">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+            Save to History
+          </button>
         </div>
       </div>
       <!-- Table area -->
@@ -1436,6 +1444,54 @@
     <pre id="exportOutput" style="display:none;background:var(--surface2);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius);padding:12px;margin:0 16px 12px;font-family:var(--mono);font-size:11px;color:var(--text);overflow:auto;max-height:300px;white-space:pre-wrap;word-break:break-all"></pre>
     <!-- Hidden download controls (server-side export path) -->
     <div id="exportDownloads" style="display:none"></div>
+  </div>
+
+  <!-- History panel -->
+  <div id="panel-history" style="display:none;flex-direction:column;gap:0;padding:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <span style="font-size:13px;font-weight:600;color:var(--text)">Saved Configuration Exports</span>
+      <div style="display:flex;gap:8px">
+        <button id="historyCompareBtn" onclick="compareSelectedHistory()" disabled style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:default;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa;opacity:0.5">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          Compare Selected
+        </button>
+        <button id="historyExportSelectedBtn" onclick="exportSelectedHistory()" disabled style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:default;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e;opacity:0.5">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+          Download Selected
+        </button>
+        <button id="historyDeleteSelectedBtn" onclick="deleteSelectedHistory()" disabled style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:default;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444;opacity:0.5">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m5 0V4a1 1 0 011-1h2a1 1 0 011 1v2"/></svg>
+          Delete Selected
+        </button>
+        <button onclick="loadHistory()" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="1,4 1,10 7,10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+    <div id="historyTableWrap" style="overflow:auto;max-height:calc(100vh - 200px)">
+      <div class="empty-state" id="historyEmpty" style="display:none">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/>
+        </svg>
+        <h3>No saved exports</h3>
+        <p>Use "Save to History" on the Config Lookup tab to save a configuration export.</p>
+      </div>
+      <table id="historyTable" style="display:none;width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+            <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);width:32px">
+              <input type="checkbox" id="historySelectAll" onchange="toggleSelectAllHistory(this.checked)" style="cursor:pointer">
+            </th>
+            <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim)">Filename</th>
+            <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);white-space:nowrap">Saved At</th>
+            <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--text-dim)">Size</th>
+            <th style="padding:8px 10px;text-align:center;font-weight:600;color:var(--text-dim)">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- PCAP Viewer panel -->
@@ -1488,10 +1544,12 @@ function switchToTab(tab) {
   if (optsPanel) optsPanel.classList.add('active');
 
   // Show/hide main panels
-  document.getElementById('panel-analysis').style.display    = tab === 'analyze' ? 'block'  : 'none';
-  document.getElementById('panel-interfaces').style.display  = tab === 'pcap'    ? 'block'  : 'none';
-  document.getElementById('panel-pcap').style.display        = tab === 'viewer'  ? 'block'  : 'none';
-  document.getElementById('panel-export').style.display      = tab === 'export'  ? 'flex'   : 'none';
+  document.getElementById('panel-analysis').style.display    = tab === 'analyze'  ? 'block'  : 'none';
+  document.getElementById('panel-interfaces').style.display  = tab === 'pcap'     ? 'block'  : 'none';
+  document.getElementById('panel-pcap').style.display        = tab === 'viewer'   ? 'block'  : 'none';
+  document.getElementById('panel-export').style.display      = tab === 'export'   ? 'flex'   : 'none';
+  document.getElementById('panel-history').style.display     = tab === 'history'  ? 'flex'   : 'none';
+  if (tab === 'history') loadHistory();
 
   // Device filter bar is only relevant on the Interfaces tab
   const deviceBar = document.getElementById('deviceBar');
@@ -2304,6 +2362,7 @@ async function runConfigLookup() {
     renderExportTable();
     document.getElementById('exportDataViewer').style.display = 'flex';
     document.getElementById('exportDataViewer').style.flexDirection = 'column';
+    _enableSaveHistoryBtn();
   } catch (err) {
     showError('exportError', `Failed to load config: ${err.message}`);
   } finally {
@@ -2328,6 +2387,7 @@ async function loadExportPreview(jobId) {
       renderExportTable();
       document.getElementById('exportDataViewer').style.display = 'flex';
       document.getElementById('exportDataViewer').style.flexDirection = 'column';
+      _enableSaveHistoryBtn();
       loadPortsLive();
     }
   } catch (err) {
@@ -3458,6 +3518,274 @@ function closeLiveLogs() {
 
 function onBackdropClick(e) {
   if (e.target === document.getElementById('logModalBackdrop')) closeLiveLogs();
+}
+
+function _enableSaveHistoryBtn() {
+  const btn = document.getElementById('saveHistoryBtn');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.style.opacity = '';
+  btn.style.cursor = 'pointer';
+}
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
+function _buildHistoryExcelWorkbook() {
+  if (!_exportData || !_exportSite) return null;
+  const site = _exportData.sites[_exportSite] || {};
+  const sections = [
+    { key: 'networks',       name: 'Networks' },
+    { key: 'wifi',           name: 'Wi-Fi' },
+    { key: 'firewall_zones', name: 'Firewall Zones' },
+    { key: 'firewall',       name: 'Firewall Policies' },
+    { key: 'policy_groups',  name: 'Policy Groups' },
+    { key: 'dns_records',    name: 'DNS Records' },
+    { key: 'routing',        name: 'Routing' },
+    { key: 'port_forward',   name: 'Port Forwards' },
+    { key: 'port_profiles',  name: 'Port Profiles' },
+    { key: 'ports',          name: 'Ports' },
+    { key: 'devices',        name: 'Devices' },
+    { key: 'clients',        name: 'Clients' },
+  ];
+  const wb = XLSX.utils.book_new();
+  for (const sec of sections) {
+    const rows = sec.key === 'ports' ? (_livePortsData || []) : _defaultSort(sec.key, site[sec.key] || []);
+    let ws;
+    if (rows && rows.length) {
+      const cfg = _getSectionConfig(sec.key, rows);
+      const header = cfg.cols.map(c => c.toUpperCase());
+      const mapped = rows.map(r => {
+        const out = {};
+        for (const c of cfg.cols) out[c.toUpperCase()] = cfg.transform(c, r[c], r);
+        return out;
+      });
+      ws = XLSX.utils.json_to_sheet(mapped, { header });
+    } else {
+      ws = XLSX.utils.aoa_to_sheet([['No data available']]);
+    }
+    const ref = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    const colWidths = [];
+    for (let C = ref.s.c; C <= ref.e.c; C++) {
+      const headerCell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+      let max = headerCell && headerCell.v != null ? String(headerCell.v).length : 8;
+      for (let R = 1; R <= ref.e.r; R++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (cell && cell.v != null) max = Math.max(max, String(cell.v).length);
+      }
+      colWidths.push({ wch: max + 2 });
+    }
+    ws['!cols'] = colWidths;
+    for (let C = ref.s.c; C <= ref.e.c; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (ws[cellRef]) {
+        ws[cellRef].s = {
+          fill: { patternType: 'solid', fgColor: { rgb: 'F97316' } },
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+        };
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, ws, sec.name);
+  }
+  return wb;
+}
+
+async function saveToHistory() {
+  if (!_exportData || !_exportSite) { alert('No config data loaded. Use Config Lookup first.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded.'); return; }
+  const btn = document.getElementById('saveHistoryBtn');
+  const origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Saving…';
+  try {
+    const wb = _buildHistoryExcelWorkbook();
+    if (!wb) throw new Error('Could not build workbook');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    // Determine UDM name
+    let udmName = 'udm';
+    const devices = (_exportData.sites[_exportSite] || {}).devices || [];
+    const udm = devices.find(d => _isUdm(d.type));
+    if (udm && udm.name) udmName = udm.name;
+    const fd = new FormData();
+    fd.append('file', blob, `${_exportFilename('config')}.xlsx`);
+    fd.append('udm_name', udmName);
+    fd.append('site', _exportSite);
+    const res = await fetch('/api/history/save', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+    btn.innerHTML = '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20,6 9,17 4,12"/></svg> Saved!';
+    setTimeout(() => { btn.innerHTML = origText; btn.style.opacity = '0.45'; btn.style.cursor = 'default'; }, 2000);
+    // Stay disabled until next config load
+  } catch (err) {
+    alert('Save to History failed: ' + err.message);
+    btn.innerHTML = origText;
+    btn.disabled = false;
+  }
+}
+
+let _historyItems = [];
+
+async function loadHistory() {
+  const tbody = document.getElementById('historyTableBody');
+  const table = document.getElementById('historyTable');
+  const empty = document.getElementById('historyEmpty');
+  const selAll = document.getElementById('historySelectAll');
+  tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--text-dim)">Loading…</td></tr>';
+  table.style.display = 'table';
+  empty.style.display = 'none';
+  try {
+    const res = await fetch('/api/history');
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+    _historyItems = data.files || data || [];
+    if (!_historyItems.length) {
+      table.style.display = 'none';
+      empty.style.display = '';
+      return;
+    }
+    table.style.display = 'table';
+    empty.style.display = 'none';
+    selAll.checked = false;
+    tbody.innerHTML = _historyItems.map((item, idx) => {
+      const sizeStr = item.size_bytes >= 1048576
+        ? (item.size_bytes / 1048576).toFixed(1) + ' MB'
+        : (item.size_bytes / 1024).toFixed(1) + ' KB';
+      const dateStr = item.saved_at ? item.saved_at.replace('T', ' ').slice(0, 19) : '';
+      const safeFilename = escHtml(item.filename);
+      return `<tr style="border-bottom:1px solid var(--border)" data-filename="${safeFilename}">
+        <td style="padding:8px 10px"><input type="checkbox" class="history-check" data-idx="${idx}" onchange="updateHistoryDeleteBtn()" style="cursor:pointer"></td>
+        <td style="padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--text)">${safeFilename}</td>
+        <td style="padding:8px 10px;white-space:nowrap;color:var(--text-dim)">${escHtml(dateStr)}</td>
+        <td style="padding:8px 10px;text-align:right;color:var(--text-dim);white-space:nowrap">${sizeStr}</td>
+        <td style="padding:8px 10px;text-align:center">
+          <div style="display:inline-flex;gap:6px">
+            <a href="/api/history/download/${encodeURIComponent(item.filename)}" download="${safeFilename}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;font-weight:600;border-radius:5px;text-decoration:none;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e">
+              <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+              Download
+            </a>
+            <button onclick="deleteHistoryFiles(['${item.filename.replace(/'/g, "\\'")}'])" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444">
+              <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m5 0V4a1 1 0 011-1h2a1 1 0 011 1v2"/></svg>
+              Delete
+            </button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    updateHistoryDeleteBtn();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--danger)">Error loading history: ${escHtml(err.message)}</td></tr>`;
+  }
+}
+
+function updateHistoryDeleteBtn() {
+  const checks = document.querySelectorAll('.history-check:checked');
+  const n = checks.length;
+  const allChecks = document.querySelectorAll('.history-check');
+  document.getElementById('historySelectAll').checked = allChecks.length > 0 && n === allChecks.length;
+
+  [
+    { id: 'historyDeleteSelectedBtn',  min: 1 },
+    { id: 'historyExportSelectedBtn',  min: 1 },
+    { id: 'historyCompareBtn',         min: 1 },
+  ].forEach(({ id, min }) => {
+    const btn = document.getElementById(id);
+    const enabled = n >= min;
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? '1' : '0.5';
+    btn.style.cursor  = enabled ? 'pointer' : 'default';
+  });
+}
+
+function toggleSelectAllHistory(checked) {
+  document.querySelectorAll('.history-check').forEach(c => { c.checked = checked; });
+  updateHistoryDeleteBtn();
+}
+
+function deleteSelectedHistory() {
+  const filenames = Array.from(document.querySelectorAll('.history-check:checked'))
+    .map(c => _historyItems[+c.dataset.idx].filename);
+  if (!filenames.length) return;
+  deleteHistoryFiles(filenames);
+}
+
+async function exportSelectedHistory() {
+  const filenames = Array.from(document.querySelectorAll('.history-check:checked'))
+    .map(c => _historyItems[+c.dataset.idx].filename);
+  if (!filenames.length) return;
+  if (filenames.length === 1) {
+    window.location.href = `/api/history/download/${encodeURIComponent(filenames[0])}`;
+    return;
+  }
+  const btn = document.getElementById('historyExportSelectedBtn');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Zipping…';
+  try {
+    const res = await fetch('/api/history/download-zip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filenames }),
+    });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'history-export.zip'; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Export failed: ' + err.message);
+  } finally {
+    btn.innerHTML = origHTML;
+    updateHistoryDeleteBtn();
+  }
+}
+
+async function compareSelectedHistory() {
+  const filenames = Array.from(document.querySelectorAll('.history-check:checked'))
+    .map(c => _historyItems[+c.dataset.idx].filename);
+  if (!filenames.length) return;
+  const btn = document.getElementById('historyCompareBtn');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.style.cursor = 'default';
+  btn.innerHTML = '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Comparing…';
+  try {
+    const res = await fetch('/api/history/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filenames }),
+    });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    a.href = url; a.download = `comparison-${ts}.xlsx`; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Compare failed: ' + err.message);
+  } finally {
+    btn.innerHTML = origHTML;
+    updateHistoryDeleteBtn();
+  }
+}
+
+async function deleteHistoryFiles(filenames) {
+  if (!filenames.length) return;
+  const plural = filenames.length === 1 ? 'this export' : `these ${filenames.length} exports`;
+  if (!confirm(`Delete ${plural}? This cannot be undone.`)) return;
+  try {
+    const res = await fetch('/api/history', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filenames }),
+    });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    loadHistory();
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
 }
 
 </script>
