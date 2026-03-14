@@ -582,36 +582,37 @@
     /* layout handled by .port-grid on main-area */
   }
 
-  .iface-card {
+  .iface-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .iface-table th {
+    position: sticky;
+    top: 0;
     background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 12px;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    user-select: none;
-    min-width: 0;
-    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    z-index: 1;
   }
-  .iface-card:hover { border-color: var(--accent); }
-  .iface-card.selected {
-    border-color: var(--accent);
-    background: rgba(0,153,255,0.08);
+  .iface-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
   }
-  .iface-card.capturable {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px rgba(0,153,255,0.25);
-  }
-  .iface-card.capturable:hover { border-color: var(--accent-hover); }
-  .iface-card.capturable.selected {
-    border-color: var(--accent-hover);
-    background: rgba(0,153,255,0.10);
-    box-shadow: 0 0 0 2px rgba(0,153,255,0.40);
-  }
-  .iface-card.down { opacity: 0.45; }
-  .iface-card.no-capture { cursor: default; border-style: dashed; }
-  .iface-card.no-capture:hover { border-color: var(--border); }
-  .iface-card.down.no-capture { opacity: 0.45; }
+  .iface-table tr.iface-row-capturable { cursor: pointer; }
+  .iface-table tr.iface-row-capturable:hover td { background: rgba(0,153,255,0.04); }
+  .iface-table tr.iface-row-selected td { background: rgba(0,153,255,0.10) !important; }
+  .iface-table tr.iface-row-selected { outline: 1px solid var(--accent); }
+  .iface-table tr.iface-row-down { opacity: 0.45; }
+  .iface-table tr.iface-row-no-capture { cursor: default; }
 
   .iface-port-name {
     display: flex;
@@ -1365,9 +1366,9 @@
     </div>
   </div>
 
-  <!-- Interfaces panel — port grid -->
+  <!-- Interfaces panel — table -->
   <div id="panel-interfaces" style="display:none">
-    <div class="port-grid" id="ifaceList"></div>
+    <div id="ifaceList" style="overflow-x:auto"></div>
   </div>
 
   <!-- Config Lookup panel -->
@@ -1822,7 +1823,7 @@ async function loadInterfaces() {
 
   // Clear previous selections and all alerts
   selectedInterfaces.clear();
-  document.querySelectorAll('.iface-card.selected').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('#ifaceList tr.iface-row-selected').forEach(r => r.classList.remove('iface-row-selected'));
   document.getElementById('ifaceError').classList.remove('active');
   document.getElementById('pcapError').classList.remove('active');
   updateCaptureButton();
@@ -1938,7 +1939,6 @@ function renderInterfaceList(list) {
   const countEl = document.getElementById('ifaceCount');
   const titleEl = document.getElementById('ifacePickerTitle');
 
-  // Update panel title to reflect active device filter
   if (_activeDeviceFilter) {
     const dev = allInterfaces.find(i => i.device_ip === _activeDeviceFilter);
     titleEl.textContent = dev ? dev.device_name : _activeDeviceFilter;
@@ -1956,89 +1956,108 @@ function renderInterfaceList(list) {
     return;
   }
 
-  // Hide device badge when filtered to a single device (it's redundant)
-  const showDeviceBadge = !_activeDeviceFilter;
+  const showDeviceCol = !_activeDeviceFilter;
 
-  container.innerHTML = list.map(iface => {
+  const headerCols = [
+    ...(showDeviceCol ? ['<th>Device</th>'] : []),
+    '<th>Interface</th>',
+    '<th>Type</th>',
+    '<th>State</th>',
+    '<th>IP Addresses</th>',
+    '<th>VLAN</th>',
+    '<th>Network</th>',
+    '<th>MAC</th>',
+    '<th>MTU</th>',
+    '<th>Speed</th>',
+    '<th>RX</th>',
+    '<th>TX</th>',
+    '<th>Connected</th>',
+  ].join('');
+
+  const rows = list.map(iface => {
     const key = `${iface.device_ip}::${iface.name}`;
     const isSelected = selectedInterfaces.has(key);
     const isDown = iface.state === 'down';
     const notCapturable = iface.capturable === false;
+    const blockCapture = isDown || notCapturable;
     const typeClass = `iface-type-${iface.type || 'other'}`;
 
     const globalIps = (iface.ips || []).filter(ip => ip.scope === 'global' || ip.scope === 'host');
-    const ipsText = globalIps.map(ip => ip.address).join('  ');
+    const ipsHtml = globalIps.length
+      ? globalIps.map(ip => escHtml(ip.address)).join('<br>')
+      : '<span style="color:var(--text-dim);font-style:italic;font-size:10px">no IP</span>';
 
-    const metaParts = [];
-    if (iface.mac) metaParts.push(iface.mac);
-    if (iface.mtu) metaParts.push(`MTU ${iface.mtu}`);
-    if (iface.link_speed != null) {
-      const spd = iface.link_speed >= 1000 ? `${iface.link_speed/1000}G` : `${iface.link_speed}M`;
-      metaParts.push(`${spd}bps`);
-    }
-    if (iface.master) metaParts.push(`member of ${iface.master}`);
-    else if (iface.parent) metaParts.push(`parent: ${iface.parent}`);
+    const spd = iface.link_speed != null
+      ? (iface.link_speed >= 1000 ? `${iface.link_speed / 1000}G` : `${iface.link_speed}M`) + 'bps'
+      : '';
 
-    const bvlans = (iface.bridge_vlans || []);
-    const vlanStr = bvlans.length ? `VLANs: ${bvlans.join(', ')}` : '';
+    const bvlans = iface.bridge_vlans || [];
+    const vlanHtml = iface.vlan_id != null
+      ? `<span class="iface-vlans">VLAN ${iface.vlan_id}</span>${bvlans.length > 1 ? `<div style="font-size:10px;color:#a78bfa">${escHtml(bvlans.join(', '))}</div>` : ''}`
+      : (bvlans.length ? `<span style="font-size:10px;color:#a78bfa">${escHtml(bvlans.join(', '))}</span>` : '');
 
-    const rxStr = iface.rx_bytes ? `↓ ${fmtBytes(iface.rx_bytes)}` : '';
-    const txStr = iface.tx_bytes ? `↑ ${fmtBytes(iface.tx_bytes)}` : '';
+    const metaLine = [];
+    if (iface.master) metaLine.push(`member of ${iface.master}`);
+    else if (iface.parent) metaLine.push(`parent: ${iface.parent}`);
+    if (notCapturable && !isDown) metaLine.push('no capture');
 
     // Connected clients / uplink device
     const connClients = iface.connected_clients || [];
-    const connDevice  = iface.connected_device || null;
-    const MAX_CLIENTS = 3;
-    let connectedHtml = '';
+    const connDevice = iface.connected_device || null;
+    let connHtml = '';
     if (connDevice) {
-      connectedHtml = `<div class="iface-connected">
-        <div class="iface-connected-label">Uplink device</div>
-        <div class="iface-connected-device">${deviceTypeIcon(connDevice.type)}${escHtml(connDevice.name)}${connDevice.ip ? ` <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(${escHtml(connDevice.ip)})</span>` : ''}</div>
-      </div>`;
+      connHtml = `<div style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--warning)">${deviceTypeIcon(connDevice.type)}${escHtml(connDevice.name)}${connDevice.ip ? ` <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(${escHtml(connDevice.ip)})</span>` : ''}</div>`;
     } else if (connClients.length > 0) {
-      const shown = connClients.slice(0, MAX_CLIENTS);
-      const rest  = connClients.length - shown.length;
-      const items = shown.map(c => {
-        const label = c.hostname || c.mac || 'unknown';
-        return `<div class="iface-connected-item"><span class="conn-host">${escHtml(label)}</span>${c.ip ? `<span class="conn-ip">${escHtml(c.ip)}</span>` : ''}</div>`;
-      }).join('');
-      const moreHtml = rest > 0 ? `<div class="iface-connected-more">+${rest} more</div>` : '';
-      connectedHtml = `<div class="iface-connected">
-        <div class="iface-connected-label">Connected (${connClients.length})</div>
-        ${items}${moreHtml}
-      </div>`;
+      const MAX = 3;
+      const shown = connClients.slice(0, MAX);
+      const rest = connClients.length - MAX;
+      connHtml = `<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:2px">Connected (${connClients.length})</div>`
+        + shown.map(c => `<div style="font-size:11px;white-space:nowrap"><span style="font-weight:600">${escHtml(c.hostname || c.mac || 'unknown')}</span>${c.ip ? ` <span style="color:var(--accent);font-family:var(--mono);font-size:10px">${escHtml(c.ip)}</span>` : ''}</div>`).join('')
+        + (rest > 0 ? `<div style="font-size:10px;color:var(--text-dim);font-style:italic">+${rest} more</div>` : '');
     }
 
-    const deviceBadge = showDeviceBadge && iface.device_name ? `
-      <div class="iface-device" style="cursor:pointer" onclick="event.stopPropagation();toggleDeviceFilter('${escHtml(iface.device_ip)}')" title="Filter to this device">
+    const deviceCol = showDeviceCol ? `<td>
+      <div style="cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap" onclick="event.stopPropagation();toggleDeviceFilter('${escHtml(iface.device_ip)}')" title="Filter to this device">
         ${deviceTypeIcon(iface.device_type)}
-        <span class="iface-dev-name">${escHtml(iface.device_name)}</span>
-        <span class="device-type-badge device-type-${escHtml(iface.device_type || 'gateway')}">${escHtml(iface.device_type || '')}</span>
-      </div>` : '';
+        <span style="font-weight:600;font-size:12px">${escHtml(iface.device_name || iface.device_ip)}</span>
+        <span class="device-type-badge device-type-${escHtml(iface.device_type || 'gateway')}" style="font-size:9px">${escHtml(iface.device_type || '')}</span>
+      </div>
+    </td>` : '';
 
-    const blockCapture = isDown || notCapturable;
-    const canCapture = !isDown && !notCapturable;
-    return `<div class="iface-card ${isSelected ? 'selected' : ''} ${isDown ? 'down' : ''} ${blockCapture ? 'no-capture' : ''} ${canCapture ? 'capturable' : ''}" data-key="${escHtml(key)}" ${blockCapture ? 'data-no-capture="1"' : ''}>
-      ${deviceBadge}
-      <div class="iface-port-name">
-        ${ifaceIcon(iface.type)}
-        <span class="iface-name">${iface.port_label ? escHtml(iface.port_label) : escHtml(iface.name)}</span>
-        ${iface.port_label ? `<span style="font-size:10px;color:var(--text-dim);margin-left:2px">(${escHtml(iface.name)})</span>` : ''}
-      </div>
-      <div class="iface-header">
-        <span class="iface-type-badge ${typeClass}">${iface.type || 'other'}</span>
-        ${iface.vlan_id ? `<span class="iface-vlans">VLAN ${iface.vlan_id}</span>` : ''}
-        <span class="iface-state-${iface.state}" style="margin-left:auto">${iface.state === 'up' ? 'LINK UP' : 'NO LINK'}</span>
-      </div>
-      ${iface.network_name ? `<div class="iface-network">&#9632; ${escHtml(iface.network_name)}</div>` : ''}
-      ${ipsText ? `<div class="iface-ips">${escHtml(ipsText)}</div>` : `<div class="iface-meta" style="color:var(--text-dim);font-style:italic">no IP — layer-2 / bridge port</div>`}
-      ${metaParts.length ? `<div class="iface-meta">${escHtml(metaParts.join(' · '))}</div>` : ''}
-      ${vlanStr ? `<div class="iface-vlans">${escHtml(vlanStr)}</div>` : ''}
-      ${notCapturable && !isDown ? `<div class="iface-meta" style="color:var(--text-dim);font-style:italic;font-size:10px">capture not supported on switches</div>` : ''}
-      ${(rxStr || txStr) ? `<div class="iface-traffic"><span>${rxStr}</span><span>${txStr}</span></div>` : ''}
-      ${connectedHtml}
-    </div>`;
+    const rowClasses = [
+      isSelected ? 'iface-row-selected' : '',
+      isDown ? 'iface-row-down' : '',
+      blockCapture ? 'iface-row-no-capture' : 'iface-row-capturable',
+    ].filter(Boolean).join(' ');
+
+    return `<tr class="${rowClasses}" data-key="${escHtml(key)}" ${blockCapture ? 'data-no-capture="1"' : ''}>
+      ${deviceCol}
+      <td>
+        <div style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+          ${ifaceIcon(iface.type)}
+          <span style="font-weight:700;font-size:13px;font-family:var(--mono)">${iface.port_label ? escHtml(iface.port_label) : escHtml(iface.name)}</span>
+          ${iface.port_label ? `<span style="font-size:10px;color:var(--text-dim)">(${escHtml(iface.name)})</span>` : ''}
+        </div>
+        ${metaLine.length ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px">${escHtml(metaLine.join(' · '))}</div>` : ''}
+      </td>
+      <td><span class="iface-type-badge ${typeClass}">${iface.type || 'other'}</span></td>
+      <td><span class="${isDown ? 'iface-state-down' : 'iface-state-up'}">${isDown ? 'NO LINK' : 'LINK UP'}</span></td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--accent)">${ipsHtml}</td>
+      <td>${vlanHtml}</td>
+      <td style="font-size:11px;color:#34d399;font-weight:600;white-space:nowrap">${iface.network_name ? escHtml(iface.network_name) : ''}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap">${escHtml(iface.mac || '')}</td>
+      <td style="font-size:11px;text-align:right;white-space:nowrap">${iface.mtu || ''}</td>
+      <td style="font-size:11px;text-align:right;white-space:nowrap">${escHtml(spd)}</td>
+      <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${iface.rx_bytes ? fmtBytes(iface.rx_bytes) : ''}</td>
+      <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${iface.tx_bytes ? fmtBytes(iface.tx_bytes) : ''}</td>
+      <td>${connHtml}</td>
+    </tr>`;
   }).join('');
+
+  container.innerHTML = `<table class="iface-table">
+    <thead><tr>${headerCols}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function selectInterfaceByKey(key) {
@@ -2047,8 +2066,8 @@ function selectInterfaceByKey(key) {
   } else {
     selectedInterfaces.add(key);
   }
-  document.querySelectorAll('.iface-card').forEach(card => {
-    card.classList.toggle('selected', selectedInterfaces.has(card.dataset.key));
+  document.querySelectorAll('#ifaceList tr[data-key]').forEach(row => {
+    row.classList.toggle('iface-row-selected', selectedInterfaces.has(row.dataset.key));
   });
   updateCaptureButton();
 }
@@ -2085,7 +2104,7 @@ function updateCaptureButton() {
 
 function clearSelectedInterfaces() {
   selectedInterfaces.clear();
-  document.querySelectorAll('.iface-card.selected').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('#ifaceList tr.iface-row-selected').forEach(r => r.classList.remove('iface-row-selected'));
   updateCaptureButton();
 }
 
@@ -3150,10 +3169,10 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Delegated click for interface cards — toggle selection for capture
+// Delegated click for interface table rows — toggle selection for capture
 document.getElementById('ifaceList').addEventListener('click', e => {
-  const card = e.target.closest('.iface-card');
-  if (card && !card.dataset.noCapture) selectInterfaceByKey(card.dataset.key);
+  const row = e.target.closest('tr[data-key]');
+  if (row && !row.dataset.noCapture) selectInterfaceByKey(row.dataset.key);
 });
 
 // Credentials sync: copy API password → all SSH password fields
