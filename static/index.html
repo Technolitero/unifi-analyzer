@@ -1223,6 +1223,19 @@
     <div class="error-banner" id="analyzeError" style="margin-top:0"></div>
   </div>
 
+  <!-- Config Lookup options -->
+  <div class="tab-opts" id="opts-export">
+    <button class="btn btn-primary" style="width:auto" id="configLookupBtn" onclick="runConfigLookup()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg>
+      Load Config
+    </button>
+    <div id="exportProgress" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;flex-shrink:0"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      <span id="exportProgressText">Loading…</span>
+    </div>
+    <div class="error-banner" id="exportError" style="margin-top:0;flex:1"></div>
+  </div>
+
   <!-- Interfaces options -->
   <div class="tab-opts" id="opts-pcap" style="flex-direction:column;align-items:stretch;gap:0">
 
@@ -1372,58 +1385,28 @@
   </div>
 
   <!-- Config Lookup panel -->
-  <div id="panel-export" style="display:none;flex-direction:column;gap:12px;padding:16px">
+  <div id="panel-export" style="display:none;flex-direction:column;gap:0">
 
-    <!-- Toolbar -->
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" id="configLookupBtn" onclick="runConfigLookup()" style="white-space:nowrap">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg>
-        Load Config
-      </button>
-      <!-- Download buttons (hidden until export job completes) -->
-      <div id="exportDownloads" style="display:none;gap:8px;flex-wrap:wrap;align-items:center">
-        <span style="font-size:11px;color:var(--success);font-weight:600">&#10003; Ready</span>
-        <button class="btn" onclick="downloadExport('excel')"
-          style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.3);color:#22c55e">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
-          Excel
-        </button>
-        <button class="btn" onclick="downloadExport('json')"
-          style="background:rgba(96,165,250,.12);border-color:rgba(96,165,250,.3);color:#60a5fa">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
-          JSON
-        </button>
-      </div>
+    <!-- Section tabs row -->
+    <div id="exportSectionTabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);align-items:center">
+      <button class="export-sec-tab active" data-sec="networks" onclick="switchExportSection('networks')">Networks</button>
+      <button class="export-sec-tab" data-sec="wifi" onclick="switchExportSection('wifi')">Wi-Fi</button>
+      <button class="export-sec-tab" data-sec="firewall_zones" onclick="switchExportSection('firewall_zones')">Firewall Zones</button>
+      <button class="export-sec-tab" data-sec="firewall" onclick="switchExportSection('firewall')">Firewall Policies</button>
+      <button class="export-sec-tab" data-sec="policy_groups" onclick="switchExportSection('policy_groups')">Policy Groups</button>
+      <button class="export-sec-tab" data-sec="dns_records" onclick="switchExportSection('dns_records')">DNS Records</button>
+      <button class="export-sec-tab" data-sec="routing" onclick="switchExportSection('routing')">Routing</button>
+      <button class="export-sec-tab" data-sec="port_forward" onclick="switchExportSection('port_forward')">Port Forwards</button>
+      <button class="export-sec-tab" data-sec="port_profiles" onclick="switchExportSection('port_profiles')">Port Profiles</button>
+      <button class="export-sec-tab" data-sec="ports" onclick="switchExportSection('ports')">Ports</button>
+      <button class="export-sec-tab" data-sec="devices" onclick="switchExportSection('devices')">Devices</button>
+      <button class="export-sec-tab" data-sec="clients" onclick="switchExportSection('clients')">Clients</button>
     </div>
 
-    <!-- Progress indicator (shown while running) -->
-    <div id="exportProgress" style="display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-      <span id="exportProgressText">Collecting configuration data…</span>
-    </div>
-
-    <!-- Error banner -->
-    <div class="error-banner" id="exportError"></div>
-
-    <!-- Data viewer (hidden until complete) -->
-    <div id="exportDataViewer" style="display:none;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+    <!-- Data viewer (hidden until data loads) -->
+    <div id="exportDataViewer" style="display:none;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin:0 16px 12px">
       <!-- Site tabs (shown when multiple sites) -->
       <div id="exportSiteTabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface2);overflow-x:auto"></div>
-      <!-- Section tabs -->
-      <div id="exportSectionTabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface)">
-        <button class="export-sec-tab active" data-sec="networks" onclick="switchExportSection('networks')">Networks</button>
-        <button class="export-sec-tab" data-sec="wifi" onclick="switchExportSection('wifi')">Wi-Fi</button>
-        <button class="export-sec-tab" data-sec="firewall_zones" onclick="switchExportSection('firewall_zones')">Firewall Zones</button>
-        <button class="export-sec-tab" data-sec="firewall" onclick="switchExportSection('firewall')">Firewall Policies</button>
-        <button class="export-sec-tab" data-sec="policy_groups" onclick="switchExportSection('policy_groups')">Policy Groups</button>
-        <button class="export-sec-tab" data-sec="dns_records" onclick="switchExportSection('dns_records')">DNS Records</button>
-        <button class="export-sec-tab" data-sec="routing" onclick="switchExportSection('routing')">Routing</button>
-        <button class="export-sec-tab" data-sec="port_forward" onclick="switchExportSection('port_forward')">Port Forwards</button>
-        <button class="export-sec-tab" data-sec="port_profiles" onclick="switchExportSection('port_profiles')">Port Profiles</button>
-        <button class="export-sec-tab" data-sec="ports" onclick="switchExportSection('ports')">Ports</button>
-        <button class="export-sec-tab" data-sec="devices" onclick="switchExportSection('devices')">Devices</button>
-        <button class="export-sec-tab" data-sec="clients" onclick="switchExportSection('clients')">Clients</button>
-      </div>
       <!-- Export toolbar -->
       <div id="exportToolbar" style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--surface2);border-bottom:1px solid var(--border)">
         <span id="exportRowCount" style="font-size:11px;color:var(--text-dim)"></span>
@@ -1443,7 +1426,9 @@
     </div>
 
     <!-- Error log (shown only on failure, hidden otherwise) -->
-    <pre id="exportOutput" style="display:none;background:var(--surface2);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius);padding:12px;font-family:var(--mono);font-size:11px;color:var(--text);overflow:auto;max-height:300px;white-space:pre-wrap;word-break:break-all"></pre>
+    <pre id="exportOutput" style="display:none;background:var(--surface2);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius);padding:12px;margin:0 16px 12px;font-family:var(--mono);font-size:11px;color:var(--text);overflow:auto;max-height:300px;white-space:pre-wrap;word-break:break-all"></pre>
+    <!-- Hidden download controls (server-side export path) -->
+    <div id="exportDownloads" style="display:none"></div>
   </div>
 
   <!-- PCAP Viewer panel -->

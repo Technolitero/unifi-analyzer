@@ -10,6 +10,7 @@ set "MIN_PYTHON_MAJOR=3"
 set "MIN_PYTHON_MINOR=8"
 set "NSSM_URL=https://nssm.cc/release/nssm-2.24.zip"
 set "NSSM_EXE=%INSTALL_DIR%\nssm.exe"
+set "DEFAULT_PORT=8080"
 
 echo.
 echo  =============================================
@@ -18,7 +19,7 @@ echo  =============================================
 echo.
 
 :: ─────────────────────────────────────────────────────────────
-:: Require administrator privileges
+:: Require administrator privileges (elevate before prompting)
 :: ─────────────────────────────────────────────────────────────
 net session >nul 2>&1
 if %errorlevel% neq 0 (
@@ -28,6 +29,30 @@ if %errorlevel% neq 0 (
 )
 
 echo  Running as Administrator  OK
+echo.
+
+:: ─────────────────────────────────────────────────────────────
+:: 0. Prompt for HTTP port
+:: ─────────────────────────────────────────────────────────────
+:prompt_port
+set /p "HTTP_PORT=  Enter HTTP port [default: %DEFAULT_PORT%]: "
+if "!HTTP_PORT!"=="" set "HTTP_PORT=%DEFAULT_PORT%"
+
+:: Validate: must be a number between 1 and 65535
+set /a "_port_check=HTTP_PORT" 2>nul
+if "!_port_check!" NEQ "!HTTP_PORT!" (
+    echo  [ERROR] Port must be a number.
+    goto :prompt_port
+)
+if !HTTP_PORT! LSS 1 (
+    echo  [ERROR] Port must be between 1 and 65535.
+    goto :prompt_port
+)
+if !HTTP_PORT! GTR 65535 (
+    echo  [ERROR] Port must be between 1 and 65535.
+    goto :prompt_port
+)
+echo     Port set to !HTTP_PORT!  OK
 echo.
 
 :: ─────────────────────────────────────────────────────────────
@@ -240,10 +265,10 @@ if !errorlevel! neq 0 (
     pause & exit /b 1
 )
 
-"%NSSM_EXE%" set "%SERVICE_NAME%" AppParameters "main:app --host 0.0.0.0 --port 8080"
+"%NSSM_EXE%" set "%SERVICE_NAME%" AppParameters "main:app --host 0.0.0.0 --port !HTTP_PORT!"
 "%NSSM_EXE%" set "%SERVICE_NAME%" AppDirectory   "%INSTALL_DIR%"
 "%NSSM_EXE%" set "%SERVICE_NAME%" DisplayName    "%SERVICE_DISPLAY%"
-"%NSSM_EXE%" set "%SERVICE_NAME%" Description    "UniFi Network Analyzer — web interface on http://localhost:8080"
+"%NSSM_EXE%" set "%SERVICE_NAME%" Description    "UniFi Network Analyzer — web interface on http://localhost:!HTTP_PORT!"
 "%NSSM_EXE%" set "%SERVICE_NAME%" Start          SERVICE_AUTO_START
 "%NSSM_EXE%" set "%SERVICE_NAME%" AppStdout      "%INSTALL_DIR%\logs\service.log"
 "%NSSM_EXE%" set "%SERVICE_NAME%" AppStderr      "%INSTALL_DIR%\logs\service-error.log"
@@ -272,7 +297,7 @@ echo.
 echo   The UniFi Analyzer service starts
 echo   automatically each time Windows boots.
 echo.
-echo   Access the app at:  http://localhost:8080
+echo   Access the app at:  http://localhost:!HTTP_PORT!
 echo   Service logs at:    %INSTALL_DIR%\logs\
 echo  =============================================
 echo.
