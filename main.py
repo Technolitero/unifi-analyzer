@@ -1,6 +1,8 @@
 """
 UniFi Analyzer — FastAPI Backend
-Run with: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+Run with:
+  source .venv/bin/activate  # Activate virtual environment
+  uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 Then open http://localhost:8080 in your browser.
 """
 

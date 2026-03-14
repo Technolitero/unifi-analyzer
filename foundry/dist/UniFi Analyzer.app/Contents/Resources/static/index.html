@@ -1,0 +1,3185 @@
+<!DOCTYPE html>
+<html lang="en" translate="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="google" content="notranslate">
+<title>UniFi Analyzer</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242838;
+    --border: #2e3347;
+    --accent: #0099ff;
+    --accent-hover: #33aaff;
+    --text: #e2e8f0;
+    --text-dim: #8892a4;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --critical: #dc2626;
+    --info: #60a5fa;
+    --radius: 8px;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.6;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Layout */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  header svg { flex-shrink: 0; }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  header p { color: var(--text-dim); font-size: 11px; }
+
+  /* Device filter bar */
+  .device-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 20px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .device-bar.visible { display: flex; }
+  .device-bar-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Credentials bar */
+  .creds-bar {
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    padding: 10px 20px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    overflow: hidden;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-width: 0;
+    transition: max-height 0.25s ease, padding 0.25s ease, border-bottom-width 0.25s ease;
+  }
+  .creds-bar.expanded {
+    max-height: 120px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-bottom-width: 2px;
+  }
+  .creds-toggle {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: var(--font);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .creds-toggle:hover { color: var(--text); border-color: var(--accent); }
+  .creds-toggle svg { transition: transform 0.25s ease; }
+  .creds-toggle.open svg { transform: rotate(180deg); }
+  .creds-group {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .creds-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .creds-field label {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+  .creds-field input {
+    height: 32px;
+    padding: 0 9px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .creds-field input.w-host  { width: 170px; }
+  .creds-field input.w-port  { width: 64px; }
+  .creds-field input.w-site  { width: 80px; }
+  .creds-field input.w-user  { width: 110px; }
+  .creds-field input.w-pass  { width: 130px; }
+  .creds-divider {
+    width: 1px;
+    height: 40px;
+    background: var(--border);
+    flex-shrink: 0;
+    margin: 0 4px;
+  }
+  .creds-sync-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding-bottom: 2px;
+  }
+  .creds-save-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding-bottom: 2px;
+  }
+  .creds-sync-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .creds-sync-label input[type=checkbox] {
+    width: auto;
+    height: auto;
+    accent-color: var(--accent);
+  }
+
+  /* Full-width column layout */
+  .tab-strip {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 16px;
+    flex-shrink: 0;
+  }
+  .tab-strip .tab-btn { flex: 0; padding: 7px 20px; white-space: nowrap; }
+
+  .options-area {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+  }
+  .tab-opts { display: none; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; padding: 6px 0; }
+  .tab-opts.active { display: flex; }
+
+  .main-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  /* Port grid — horizontal, auto-fill columns */
+  .port-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    min-width: 0;
+  }
+  .port-grid > * { min-width: 0; }
+  .tab-btn {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: calc(var(--radius) - 2px);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .tab-btn:hover:not(.active):not(:disabled) { background: var(--border); color: var(--text); }
+  .tab-btn:disabled { opacity: 0.35; cursor: default; }
+  .tab-btn.viewer-ready {
+    color: #fff;
+    background: linear-gradient(135deg, #059669, #10b981);
+    animation: viewerPulse 1.8s ease-in-out infinite;
+  }
+  .tab-btn.viewer-ready.active { animation: none; }
+  @keyframes viewerPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.6); }
+    50%       { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Form elements */
+  .field-group { display: flex; flex-direction: column; gap: 12px; }
+  label { font-size: 12px; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: block; }
+
+  input, select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: var(--font);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--text-dim); }
+  select option { background: var(--surface2); }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #fff; width: 100%; justify-content: center; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-copy { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-copy.copied { background: var(--success); color: #fff; border-color: var(--success); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); margin-bottom: 12px; }
+
+  /* Stats row */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .stat-card:hover { border-color: var(--accent); background: var(--surface2); }
+  .stat-card.active { border-color: var(--accent); background: rgba(0,153,255,0.08); }
+  .stat-value { font-size: 26px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  /* Stat detail drawer */
+  .stat-detail {
+    display: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .stat-detail.active { display: block; }
+  .stat-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-detail-title { font-size: 13px; font-weight: 600; }
+  .stat-detail-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .stat-detail-close:hover { color: var(--text); }
+  .stat-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .stat-detail-table th {
+    text-align: left;
+    padding: 7px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .stat-detail-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(46,51,71,0.5);
+    font-family: var(--mono);
+    font-size: 11px;
+    vertical-align: middle;
+  }
+  .stat-detail-table tr:last-child td { border-bottom: none; }
+  .stat-detail-table tr:hover td { background: rgba(255,255,255,0.03); }
+  .detail-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .detail-up   { background: rgba(34,197,94,.15);  color: var(--success); }
+  .detail-down { background: rgba(239,68,68,.15);  color: var(--danger); }
+  .detail-wifi { background: rgba(251,191,36,.12); color: #fbbf24; }
+  .detail-wired{ background: rgba(96,165,250,.12); color: #60a5fa; }
+
+  /* Suggestions */
+  .suggestion-filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .filter-chip {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    transition: all 0.15s;
+  }
+  .filter-chip.active { border-color: currentColor; }
+  .filter-chip[data-sev="all"].active { color: var(--text); background: var(--surface2); }
+  .filter-chip[data-sev="critical"].active { color: var(--critical); background: rgba(220,38,38,.1); }
+  .filter-chip[data-sev="high"].active { color: var(--danger); background: rgba(239,68,68,.1); }
+  .filter-chip[data-sev="medium"].active { color: var(--warning); background: rgba(245,158,11,.1); }
+  .filter-chip[data-sev="low"].active { color: var(--success); background: rgba(34,197,94,.1); }
+  .filter-chip[data-sev="info"].active { color: var(--info); background: rgba(96,165,250,.1); }
+
+  .suggestion-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .suggestion-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    transition: border-color 0.15s;
+  }
+  .suggestion-item:hover { border-color: var(--border); }
+  .suggestion-item[data-sev="critical"] { border-left-color: var(--critical); }
+  .suggestion-item[data-sev="high"] { border-left-color: var(--danger); }
+  .suggestion-item[data-sev="medium"] { border-left-color: var(--warning); }
+  .suggestion-item[data-sev="low"] { border-left-color: var(--success); }
+  .suggestion-item[data-sev="info"] { border-left-color: var(--info); }
+
+  .sug-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .sug-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+    text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0;
+  }
+  .sug-badge.critical { background: rgba(220,38,38,.2); color: var(--critical); }
+  .sug-badge.high { background: rgba(239,68,68,.2); color: var(--danger); }
+  .sug-badge.medium { background: rgba(245,158,11,.2); color: var(--warning); }
+  .sug-badge.low { background: rgba(34,197,94,.2); color: var(--success); }
+  .sug-badge.info { background: rgba(96,165,250,.2); color: var(--info); }
+
+  .sug-category { font-size: 11px; color: var(--text-dim); }
+  .sug-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .sug-detail { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+  .sug-rec { font-size: 13px; background: var(--surface2); border-radius: 6px; padding: 8px 12px; border-left: 2px solid var(--accent); }
+  .sug-rec::before { content: "Recommendation: "; font-weight: 600; color: var(--accent); }
+
+  /* PCAP output */
+  .pcap-output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .pcap-text {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 70vh;
+    overflow-y: auto;
+    color: #c9d1d9;
+  }
+  .pcap-text .pkt-header { color: #79c0ff; }
+  .pcap-text .pkt-sep { color: #3d444d; }
+
+  /* Loader */
+  .loader {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-dim);
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .loader.active { display: flex; }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Empty / error states */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-dim);
+  }
+  .empty-state svg { margin-bottom: 12px; opacity: 0.4; }
+  .empty-state h3 { font-size: 15px; margin-bottom: 6px; color: var(--text); }
+
+  .error-banner {
+    display: none;
+    background: rgba(239,68,68,.1);
+    border: 1px solid rgba(239,68,68,.3);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .error-banner.active { display: block; }
+
+  .success-banner {
+    display: none;
+    background: rgba(34,197,94,.1);
+    border: 1px solid rgba(34,197,94,.3);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    color: var(--success);
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .success-banner.active { display: block; }
+
+  /* Section headers */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .section-header h2 { font-size: 16px; font-weight: 600; }
+  .badge-count {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* Progress bar */
+  .capture-progress { display: none; margin-top: 10px; }
+  .capture-progress.active { display: block; }
+  .progress-bar-bg {
+    background: var(--surface2);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 1s linear;
+  }
+  .progress-label { font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between; }
+
+  /* Interface picker */
+  .iface-search {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 7px 12px;
+    font-size: 12px;
+    margin-bottom: 8px;
+    outline: none;
+  }
+  .iface-search:focus { border-color: var(--accent); }
+
+  .iface-list {
+    /* layout handled by .port-grid on main-area */
+  }
+
+  .iface-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .iface-card:hover { border-color: var(--accent); }
+  .iface-card.selected {
+    border-color: var(--accent);
+    background: rgba(0,153,255,0.08);
+  }
+  .iface-card.capturable {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(0,153,255,0.25);
+  }
+  .iface-card.capturable:hover { border-color: var(--accent-hover); }
+  .iface-card.capturable.selected {
+    border-color: var(--accent-hover);
+    background: rgba(0,153,255,0.10);
+    box-shadow: 0 0 0 2px rgba(0,153,255,0.40);
+  }
+  .iface-card.down { opacity: 0.45; }
+  .iface-card.no-capture { cursor: default; border-style: dashed; }
+  .iface-card.no-capture:hover { border-color: var(--border); }
+  .iface-card.down.no-capture { opacity: 0.45; }
+
+  .iface-port-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    min-width: 0;
+  }
+  .iface-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .iface-name { font-weight: 700; font-size: 14px; font-family: var(--mono); overflow-wrap: break-word; word-break: break-word; white-space: normal; min-width: 0; }
+  .iface-type-badge {
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+  }
+  .iface-type-ethernet { background: rgba(96,165,250,.15); color: #60a5fa; }
+  .iface-type-bridge   { background: rgba(167,139,250,.15); color: #a78bfa; }
+  .iface-type-vlan     { background: rgba(52,211,153,.15); color: #34d399; }
+  .iface-type-wireless { background: rgba(251,191,36,.15); color: #fbbf24; }
+  .iface-type-bond     { background: rgba(249,115,22,.15); color: #f97316; }
+  .iface-type-tunnel   { background: rgba(148,163,184,.15); color: #94a3b8; }
+  .iface-type-other    { background: rgba(148,163,184,.15); color: #94a3b8; }
+
+  .iface-state-up   { color: var(--success); font-size: 10px; font-weight: 700; margin-left: auto; }
+  .iface-state-down { color: var(--danger);  font-size: 10px; font-weight: 700; margin-left: auto; }
+
+  .iface-ips { font-size: 11px; color: var(--accent); font-family: var(--mono); overflow-wrap: break-word; word-break: break-all; }
+  .iface-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; overflow-wrap: break-word; word-break: break-word; }
+  .iface-network { font-size: 11px; color: #34d399; font-weight: 600; margin-top: 2px; }
+  .iface-vlans { font-size: 11px; color: #a78bfa; }
+
+  .iface-traffic {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .iface-connected {
+    margin-top: 5px;
+    border-top: 1px solid var(--border);
+    padding-top: 4px;
+  }
+  .iface-connected-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+  .iface-connected-item {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .iface-connected-item .conn-ip {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .iface-connected-item .conn-host {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .iface-connected-more {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+    margin-top: 1px;
+  }
+  .iface-connected-device {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--warning);
+    margin-top: 2px;
+  }
+
+  /* Export data viewer */
+  .export-sec-tab {
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, background 0.15s;
+  }
+  .export-sec-tab:hover { background: var(--surface2); color: var(--text); }
+  .export-sec-tab.active { color: var(--accent); background: var(--surface2); font-weight: 600; }
+  .export-site-tab {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .export-site-tab.active { color: var(--accent); font-weight: 700; }
+  #exportTableArea table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  #exportTableArea th {
+    position: sticky;
+    top: 0;
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  #exportTableArea td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #exportTableArea tr:hover td { background: var(--surface2); }
+  #exportTableArea .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  #exportTableArea .badge-yes { background:rgba(34,197,94,.15);color:#22c55e; }
+  #exportTableArea .badge-no  { background:rgba(239,68,68,.12);color:#ef4444; }
+  #exportTableArea .badge-blue{ background:rgba(96,165,250,.15);color:#60a5fa; }
+  #exportTableArea .empty-note {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  #exportSummaryBar {
+    display: flex;
+    gap: 20px;
+    padding: 10px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .exp-stat { display:flex;flex-direction:column;gap:1px; }
+  .exp-stat-val { font-size:18px;font-weight:700;color:var(--text); }
+  .exp-stat-lbl { font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px; }
+
+  .iface-empty {
+    text-align: center;
+    padding: 24px 12px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+
+  .selected-display {
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .selected-display .sel-label { color: var(--text-dim); font-size: 11px; font-family: var(--font); font-weight: 400; }
+
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  .btn-capture {
+    padding: 9px 16px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s;
+    background: var(--surface2);
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .btn-capture.ready {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    box-shadow: 0 0 0 0 rgba(0,153,255,0.4);
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  .btn-capture.ready:hover { background: var(--accent-hover); }
+  .btn-capture:disabled { cursor: not-allowed; opacity: 0.5; animation: none; }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,153,255,0.3); }
+    50%       { box-shadow: 0 0 0 6px rgba(0,153,255,0); }
+  }
+
+  .show-down-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .show-down-toggle input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .device-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .device-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .device-chip:hover { border-color: var(--accent); color: var(--text); }
+  .device-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(0,153,255,0.1); }
+
+  .iface-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .iface-filter-row .iface-search {
+    flex: 1;
+    margin-bottom: 0;
+  }
+
+  .capture-options-details {
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  .capture-options-details summary {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .capture-options-details summary::-webkit-details-marker { display: none; }
+  .capture-options-details summary::before {
+    content: '▶';
+    font-size: 9px;
+    transition: transform 0.15s;
+  }
+  .capture-options-details[open] summary::before { transform: rotate(90deg); }
+  .capture-options-details .field-group { margin-top: 10px; }
+
+  /* Capture target mode toggle */
+  .target-btn {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .target-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .target-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+
+  /* Device cards (discovered APs/switches) */
+  .device-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 9px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .device-card:hover { border-color: var(--accent); }
+  .device-card.selected { border-color: var(--accent); background: rgba(0,153,255,0.08); }
+  .device-card.offline { opacity: 0.55; }
+  .device-card-header { display: flex; align-items: center; gap: 8px; }
+  .device-name { font-weight: 700; font-size: 12px; font-family: var(--mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .device-type-badge { font-size: 10px; padding: 1px 7px; border-radius: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.4px; flex-shrink: 0; }
+  .device-type-ap      { background: rgba(251,191,36,.15); color: #fbbf24; }
+  .device-type-switch  { background: rgba(52,211,153,.15);  color: #34d399; }
+  .device-type-gateway { background: rgba(96,165,250,.15);  color: #60a5fa; }
+  .device-meta { font-size: 11px; color: var(--text-dim); margin-top: 3px; font-family: var(--mono); }
+
+  /* Device badge on interface cards */
+  .iface-device {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .iface-device .iface-dev-name {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  /* Live Log Modal */
+  .log-modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .log-modal-backdrop.open { display: flex; }
+  .log-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    width: min(1100px, 94vw);
+    height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  }
+  .log-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .log-modal-title { font-weight: 700; font-size: 13px; font-family: var(--mono); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex-shrink: 0; animation: logPulse 1.4s ease-in-out infinite; }
+  .log-status-dot.stopped { background: var(--text-dim); animation: none; }
+  @keyframes logPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .log-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .log-filter-bar input[type=text] {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: var(--mono);
+    outline: none;
+    width: auto;
+  }
+  .log-filter-bar input[type=text]:focus { border-color: var(--accent); }
+  .log-filter-bar label { font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; text-transform: none; letter-spacing: 0; font-weight: 400; margin: 0; }
+  .log-filter-bar label input[type=checkbox] { width: auto; height: auto; accent-color: var(--accent); }
+  .log-count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+  .log-output {
+    flex: 1;
+    overflow-y: auto;
+    background: #0d1117;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .log-line { padding: 1px 0; white-space: pre-wrap; word-break: break-all; color: #c9d1d9; }
+  .log-line.hidden { display: none; }
+  .log-line mark { background: rgba(245,158,11,0.35); color: var(--warning); border-radius: 2px; }
+  .log-line.log-err  { color: #ff7b7b; }
+  .log-line.log-warn { color: #fbbf24; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3e4458; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .port-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<header>
+  <svg width="32" height="32" viewBox="0 0 36 36" fill="none">
+    <rect width="36" height="36" rx="8" fill="#0099ff" fill-opacity="0.15"/>
+    <path d="M18 6C11.37 6 6 11.37 6 18s5.37 12 12 12 12-5.37 12-12S24.63 6 18 6z" fill="none" stroke="#0099ff" stroke-width="1.5"/>
+    <circle cx="18" cy="18" r="4" fill="#0099ff"/>
+    <path d="M18 10v4M18 22v4M10 18h4M22 18h4" stroke="#0099ff" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <h1>UniFi Analyzer</h1>
+    <p>Performance analysis &amp; packet capture for UniFi Dream Machine</p>
+  </div>
+  <button class="creds-toggle" id="credsToggle" onclick="toggleCredsBar()" title="Show/hide credentials">
+    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-14v2m0 16v2m-7.07-2.93 1.41-1.41m11.32 0 1.41 1.41M3 12H1m22 0h-2M4.93 4.93l1.41 1.41m11.32 0 1.41-1.41"/></svg>
+    Credentials
+  </button>
+</header>
+
+<!-- Unified credentials bar (collapsed by default) -->
+<div class="creds-bar" id="credsBar">
+  <!-- Controller / API -->
+  <div class="creds-group">
+    <div class="creds-field">
+      <label for="creds-host">UDM Host <span style="color:var(--danger)">*</span></label>
+      <input id="creds-host" class="w-host" type="text" placeholder="192.168.1.1" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="creds-field">
+      <label for="creds-api-port">API Port</label>
+      <input id="creds-api-port" class="w-port" type="number" value="443">
+    </div>
+    <div class="creds-field">
+      <label for="creds-api-site">Site</label>
+      <input id="creds-api-site" class="w-site" type="text" value="default">
+    </div>
+    <div class="creds-field">
+      <label for="creds-api-user">API Username</label>
+      <input id="creds-api-user" class="w-user" type="text" value="admin" autocomplete="off">
+    </div>
+    <div class="creds-field">
+      <label for="creds-api-pass">API Password</label>
+      <input id="creds-api-pass" class="w-pass" type="password" placeholder="••••••••" autocomplete="off">
+    </div>
+    <div class="creds-field">
+      <label for="creds-api-key">API Key</label>
+      <input id="creds-api-key" class="w-pass" type="password" placeholder="••••••••" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+
+  <div class="creds-divider"></div>
+
+  <!-- SSH — all on one line -->
+  <div class="creds-group">
+    <div class="creds-field">
+      <label for="creds-ssh-port">SSH Port</label>
+      <input id="creds-ssh-port" class="w-port" type="number" value="22">
+    </div>
+    <div class="creds-field">
+      <label for="creds-udm-user" style="color:var(--accent)">UDM User</label>
+      <input id="creds-udm-user" class="w-user" type="text" value="root" autocomplete="off">
+    </div>
+    <div class="creds-field">
+      <label for="creds-udm-pass" style="color:var(--accent)">UDM Password</label>
+      <input id="creds-udm-pass" class="w-pass" type="password" placeholder="••••••••" autocomplete="off">
+    </div>
+    <div class="creds-field">
+      <label for="creds-dev-user" style="color:var(--warning)">Device User</label>
+      <input id="creds-dev-user" class="w-user" type="text" value="admin" autocomplete="off">
+    </div>
+    <div class="creds-field">
+      <label for="creds-dev-pass" style="color:var(--warning)">Device Password</label>
+      <input id="creds-dev-pass" class="w-pass" type="password" placeholder="••••••••" autocomplete="off">
+    </div>
+    <div class="creds-sync-wrap" style="padding-bottom:0">
+      <label class="creds-sync-label" title="Copy API password to all SSH password fields">
+        <input type="checkbox" id="creds-sync" onchange="onCredsSync()">
+        Copy API pass
+      </label>
+    </div>
+    <div class="creds-save-wrap">
+      <button class="btn btn-primary btn-sm" onclick="saveConfig()" title="Save credentials to disk">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+        Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Tab strip -->
+<div class="tab-strip">
+  <button class="tab-btn active" data-tab="analyze">Analyze</button>
+  <button class="tab-btn" data-tab="export">Config Lookup</button>
+  <button class="tab-btn" data-tab="pcap">Interfaces</button>
+  <button class="tab-btn" data-tab="viewer" id="viewerTabBtn" disabled>PCAP Viewer</button>
+</div>
+
+<!-- Device filter bar (shown after interface load) -->
+<div class="device-bar" id="deviceBar">
+  <span class="device-bar-label">Filter</span>
+  <div class="device-chips" id="deviceChips"></div>
+  <button class="btn btn-copy" id="liveLogsBtn" onclick="openLiveLogs()" style="display:none;margin-left:8px;padding:4px 12px;font-size:11px;flex-shrink:0">
+    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 17L10 11 4 5M12 19h8"/></svg>
+    Live Logs
+  </button>
+</div>
+
+<!-- Live Log Modal -->
+<div class="log-modal-backdrop" id="logModalBackdrop" onclick="onBackdropClick(event)">
+  <div class="log-modal">
+    <div class="log-modal-header">
+      <div class="log-status-dot" id="logStatusDot"></div>
+      <span class="log-modal-title" id="logModalTitle">Live Logs</span>
+      <span class="log-count" id="logLineCount">0 lines</span>
+      <button class="btn btn-copy btn-sm" id="logToggleBtn" onclick="toggleLogStream()" style="padding:4px 10px;font-size:11px">Pause</button>
+      <button class="btn btn-copy btn-sm" onclick="clearLogOutput()" style="padding:4px 10px;font-size:11px">Clear</button>
+      <button class="btn btn-copy btn-sm" onclick="closeLiveLogs()" style="padding:4px 10px;font-size:11px">✕ Close</button>
+    </div>
+    <div class="log-filter-bar">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-dim);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="logFilter" placeholder="Filter lines... (supports plain text or /regex/)" oninput="applyLogFilter()">
+      <label style="color:var(--danger)"><input type="checkbox" id="logErrorsOnly" onchange="applyLogFilter()"> Errors only</label>
+      <label><input type="checkbox" id="logAutoScroll" checked> Auto-scroll</label>
+      <label><input type="checkbox" id="logCaseSensitive" onchange="applyLogFilter()"> Case sensitive</label>
+      <label><input type="checkbox" id="logInvert" onchange="applyLogFilter()"> Invert</label>
+    </div>
+    <div class="log-output" id="logOutput"></div>
+  </div>
+</div>
+
+<!-- Options area — per-tab controls -->
+<div class="options-area">
+
+  <!-- Analyze options -->
+  <div class="tab-opts active" id="opts-analyze">
+    <button class="btn btn-primary" style="width:auto" id="analyzeBtn" onclick="runAnalysis()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      Analyze Configuration
+    </button>
+    <div class="loader" id="analyzeLoader" style="margin-top:0">
+      <div class="spinner"></div>
+      <span>Connecting...</span>
+    </div>
+    <div class="error-banner" id="analyzeError" style="margin-top:0"></div>
+  </div>
+
+  <!-- Interfaces options -->
+  <div class="tab-opts" id="opts-pcap" style="flex-direction:column;align-items:stretch;gap:0">
+
+    <!-- Row 1: Load + filter -->
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0">
+      <button class="btn btn-primary" style="width:auto;flex-shrink:0" id="loadIfaceBtn" onclick="loadInterfaces()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" opacity="0"/><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span id="loadIfaceBtnLabel">Load Interfaces</span>
+      </button>
+      <div class="loader" id="ifaceLoader" style="margin-top:0;flex-shrink:0">
+        <div class="spinner"></div>
+        <span>Discovering...</span>
+      </div>
+      <div class="error-banner" id="ifaceError" style="margin-top:0;flex:1"></div>
+      <!-- Filter + count (shown after load) -->
+      <div id="ifaceFilterRow" style="display:none;align-items:center;gap:8px;flex:1;min-width:220px">
+        <span id="ifacePickerTitle" style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--text-dim)">All Interfaces</span>
+        <span id="ifaceCount" style="font-size:11px;color:var(--text-dim);white-space:nowrap"></span>
+        <input class="iface-search" id="ifaceSearch" type="text" placeholder="Filter by name, IP, VLAN..." oninput="applyInterfaceFilters()" style="margin:0;flex:1;min-width:140px">
+        <label class="show-down-toggle" style="flex-shrink:0">
+          <input type="checkbox" id="showDownIfaces" onchange="applyInterfaceFilters()">
+          Show all
+        </label>
+        <button onclick="exportInterfacesCsv()" style="flex-shrink:0;padding:5px 10px;font-size:11px;background:none;border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);cursor:pointer;white-space:nowrap" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'" title="Export all interfaces to CSV">
+          ↓ Export CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- Row 2: Capture button + always-visible options -->
+    <div id="pcapConfigRow" style="display:none;align-items:flex-end;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--border)">
+      <button class="btn-capture" id="pcapBtn" onclick="runPcap()" disabled style="flex-shrink:0;align-self:flex-end">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg>
+        <span id="pcapBtnLabel">Select interfaces</span>
+      </button>
+      <button id="clearSelBtn" onclick="clearSelectedInterfaces()" style="display:none;flex-shrink:0;align-self:flex-end;padding:6px 12px;font-size:12px;background:none;border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);cursor:pointer" onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">
+        ✕ Clear selection
+      </button>
+      <div>
+        <label for="pc-dur" style="font-size:10px;margin-bottom:3px">Duration (s)</label>
+        <input id="pc-dur" type="number" value="30" min="5" max="300" style="width:72px">
+      </div>
+      <div>
+        <label for="pc-count" style="font-size:10px;margin-bottom:3px">Max Packets</label>
+        <input id="pc-count" type="number" placeholder="∞" min="1" style="width:84px">
+      </div>
+      <div style="flex:1;min-width:150px">
+        <label for="pc-filter" style="font-size:10px;margin-bottom:3px">BPF Filter</label>
+        <input id="pc-filter" type="text" placeholder="e.g. tcp port 443" spellcheck="false">
+      </div>
+      <div style="flex:2;min-width:180px">
+        <label for="pc-desc" style="font-size:10px;margin-bottom:3px">Description</label>
+        <input id="pc-desc" type="text" placeholder="e.g. Troubleshooting slow streaming" spellcheck="false">
+      </div>
+      <div>
+        <label for="pc-maxdisplay" style="font-size:10px;margin-bottom:3px">Max display</label>
+        <input id="pc-maxdisplay" type="number" value="1000" min="10" max="5000" style="width:84px">
+      </div>
+    </div>
+
+    <!-- Row 3: Progress + error -->
+    <div class="capture-progress" id="captureProgress" style="margin:0;padding:4px 0">
+      <div class="progress-label">
+        <span id="progLabel">Capturing...</span>
+        <span id="progTime">0s</span>
+      </div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
+    <div class="error-banner" id="pcapError" style="margin-top:4px"></div>
+  </div>
+
+  <!-- PCAP Viewer options -->
+  <div class="tab-opts" id="opts-viewer">
+    <span class="badge-count" id="pcapSize" style="flex-shrink:0"></span>
+    <button class="btn btn-copy" id="copyBtn" onclick="copyPcap()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+      </svg>
+      Copy
+    </button>
+    <button class="btn btn-copy" onclick="downloadPcap()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+      </svg>
+      Download .txt
+    </button>
+    <button class="btn btn-copy" id="downloadRawBtn" onclick="downloadRawPcap()" style="display:none">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        <circle cx="12" cy="6" r="2" fill="currentColor" stroke="none"/>
+      </svg>
+      Download .pcap
+    </button>
+    <button class="btn btn-copy" onclick="switchToTab('pcap')" style="margin-left:auto">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      Back to Interfaces
+    </button>
+    <div class="success-banner" id="copiedBanner" style="margin:0;flex:0 0 100%">Copied to clipboard! Paste into your AI assistant.</div>
+  </div>
+
+</div>
+
+<!-- Main content area -->
+<div class="main-area">
+
+  <!-- Analyze panel -->
+  <div id="panel-analysis">
+    <div class="empty-state" id="analysisEmpty">
+      <svg width="56" height="56" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+        <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+      </svg>
+      <h3>No analysis yet</h3>
+      <p>Enter your UDM credentials and click "Analyze Configuration" to get started.</p>
+    </div>
+    <div id="analysisResults" style="display:none">
+      <div class="stats" id="statsRow"></div>
+      <div class="stat-detail" id="statDetail">
+        <div class="stat-detail-header">
+          <span class="stat-detail-title" id="statDetailTitle"></span>
+          <input id="statDetailSearch" type="text" placeholder="Filter..." oninput="filterStatTable()"
+            style="flex:1;max-width:220px;margin:0 12px;height:28px;padding:0 9px;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);outline:none">
+          <button class="stat-detail-close" onclick="closeStatDetail()">&#x2715;</button>
+        </div>
+        <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
+          <table class="stat-detail-table" id="statDetailTable"></table>
+        </div>
+      </div>
+      <div class="section-header">
+        <h2>Suggestions</h2>
+        <span class="badge-count" id="suggCount">0</span>
+      </div>
+      <div class="suggestion-filters" id="suggFilters">
+        <button class="filter-chip active" data-sev="all" onclick="filterSuggestions('all', this)">All</button>
+        <button class="filter-chip" data-sev="critical" onclick="filterSuggestions('critical', this)">Critical</button>
+        <button class="filter-chip" data-sev="high" onclick="filterSuggestions('high', this)">High</button>
+        <button class="filter-chip" data-sev="medium" onclick="filterSuggestions('medium', this)">Medium</button>
+        <button class="filter-chip" data-sev="low" onclick="filterSuggestions('low', this)">Low</button>
+        <button class="filter-chip" data-sev="info" onclick="filterSuggestions('info', this)">Info</button>
+      </div>
+      <div class="suggestion-list" id="suggList"></div>
+    </div>
+  </div>
+
+  <!-- Interfaces panel — port grid -->
+  <div id="panel-interfaces" style="display:none">
+    <div class="port-grid" id="ifaceList"></div>
+  </div>
+
+  <!-- Config Lookup panel -->
+  <div id="panel-export" style="display:none;flex-direction:column;gap:12px;padding:16px">
+
+    <!-- Toolbar -->
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="configLookupBtn" onclick="runConfigLookup()" style="white-space:nowrap">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg>
+        Load Config
+      </button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 2px"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="export-humanize"> Humanize timestamps
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="export-strip-ids"> Strip IDs
+      </label>
+      <button class="btn" id="exportRunBtn" onclick="runConfigExport()" style="white-space:nowrap;margin-left:auto">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+        Export Files
+      </button>
+      <!-- Download buttons (hidden until export job completes) -->
+      <div id="exportDownloads" style="display:none;gap:8px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--success);font-weight:600">&#10003; Ready</span>
+        <button class="btn" onclick="downloadExport('excel')"
+          style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.3);color:#22c55e">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+          Excel
+        </button>
+        <button class="btn" onclick="downloadExport('json')"
+          style="background:rgba(96,165,250,.12);border-color:rgba(96,165,250,.3);color:#60a5fa">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+          JSON
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress indicator (shown while running) -->
+    <div id="exportProgress" style="display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      <span id="exportProgressText">Collecting configuration data…</span>
+    </div>
+
+    <!-- Error banner -->
+    <div class="error-banner" id="exportError"></div>
+
+    <!-- Data viewer (hidden until complete) -->
+    <div id="exportDataViewer" style="display:none;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+      <!-- Site tabs (shown when multiple sites) -->
+      <div id="exportSiteTabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface2);overflow-x:auto"></div>
+      <!-- Section tabs -->
+      <div id="exportSectionTabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface)">
+        <button class="export-sec-tab active" data-sec="networks" onclick="switchExportSection('networks')">Networks</button>
+        <button class="export-sec-tab" data-sec="wifi" onclick="switchExportSection('wifi')">Wi-Fi</button>
+        <button class="export-sec-tab" data-sec="firewall_zones" onclick="switchExportSection('firewall_zones')">Firewall Zones</button>
+        <button class="export-sec-tab" data-sec="firewall" onclick="switchExportSection('firewall')">Firewall Policies</button>
+        <button class="export-sec-tab" data-sec="policy_groups" onclick="switchExportSection('policy_groups')">Policy Groups</button>
+        <button class="export-sec-tab" data-sec="dns_records" onclick="switchExportSection('dns_records')">DNS Records</button>
+        <button class="export-sec-tab" data-sec="routing" onclick="switchExportSection('routing')">Routing</button>
+        <button class="export-sec-tab" data-sec="port_forward" onclick="switchExportSection('port_forward')">Port Forwards</button>
+        <button class="export-sec-tab" data-sec="port_profiles" onclick="switchExportSection('port_profiles')">Port Profiles</button>
+        <button class="export-sec-tab" data-sec="devices" onclick="switchExportSection('devices')">Devices</button>
+        <button class="export-sec-tab" data-sec="clients" onclick="switchExportSection('clients')">Clients</button>
+      </div>
+      <!-- Export toolbar -->
+      <div id="exportToolbar" style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--surface2);border-bottom:1px solid var(--border)">
+        <span id="exportRowCount" style="font-size:11px;color:var(--text-dim)"></span>
+        <div style="display:flex;gap:8px">
+          <button onclick="exportTableCSV()" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+            Export CSV
+          </button>
+          <button onclick="exportAllToExcel()" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+            Export All to Excel
+          </button>
+        </div>
+      </div>
+      <!-- Table area -->
+      <div id="exportTableArea" style="overflow:auto;max-height:calc(100vh - 280px);min-height:200px"></div>
+    </div>
+
+    <!-- Error log (shown only on failure, hidden otherwise) -->
+    <pre id="exportOutput" style="display:none;background:var(--surface2);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius);padding:12px;font-family:var(--mono);font-size:11px;color:var(--text);overflow:auto;max-height:300px;white-space:pre-wrap;word-break:break-all"></pre>
+  </div>
+
+  <!-- PCAP Viewer panel -->
+  <div id="panel-pcap" style="display:none">
+    <div class="empty-state" id="pcapEmpty">
+      <svg width="56" height="56" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+        <path d="M9 17H7A5 5 0 017 7h.38M15.73 7H17a5 5 0 010 10h-2M8 12h8"/>
+      </svg>
+      <h3>No capture yet</h3>
+      <p>Select interfaces on the Interfaces tab and click the capture button.</p>
+    </div>
+    <div id="pcapResults" style="display:none">
+      <pre class="pcap-text" id="pcapText"></pre>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let allSuggestions = [];
+let pcapText = '';
+let pcapResults = [];
+let captureTimer = null;
+let allInterfaces = [];
+let selectedInterfaces = new Set(); // compound keys: "device_ip::iface_name"
+let _activeDeviceFilter = null; // device_ip string or null = show all
+
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.disabled) return;
+    switchToTab(btn.dataset.tab);
+  });
+});
+
+function switchToTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-opts').forEach(p => p.classList.remove('active'));
+  const tabBtn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+  if (tabBtn) {
+    tabBtn.classList.add('active');
+    if (tab === 'viewer') tabBtn.classList.remove('viewer-ready');
+  }
+  const optsPanel = document.getElementById('opts-' + tab);
+  if (optsPanel) optsPanel.classList.add('active');
+
+  // Show/hide main panels
+  document.getElementById('panel-analysis').style.display    = tab === 'analyze' ? 'block'  : 'none';
+  document.getElementById('panel-interfaces').style.display  = tab === 'pcap'    ? 'block'  : 'none';
+  document.getElementById('panel-pcap').style.display        = tab === 'viewer'  ? 'block'  : 'none';
+  document.getElementById('panel-export').style.display      = tab === 'export'  ? 'flex'   : 'none';
+}
+
+// ---------------------------------------------------------------------------
+// Analysis
+// ---------------------------------------------------------------------------
+async function runAnalysis() {
+  const host = document.getElementById('creds-host').value.trim();
+  const port = document.getElementById('creds-api-port').value;
+  const site = document.getElementById('creds-api-site').value.trim();
+  const username = document.getElementById('creds-api-user').value.trim();
+  const password = document.getElementById('creds-api-pass').value;
+
+  if (!host) {
+    showError('analyzeError', 'Missing: UDM Host (credentials bar above).');
+    document.getElementById('creds-host').focus();
+    return;
+  }
+  if (!username) {
+    showError('analyzeError', 'Missing: API Username.');
+    document.getElementById('creds-api-user').focus();
+    return;
+  }
+  if (!password) {
+    showError('analyzeError', 'Missing: API Password.');
+    document.getElementById('creds-api-pass').focus();
+    return;
+  }
+
+  const btn = document.getElementById('analyzeBtn');
+  const loader = document.getElementById('analyzeLoader');
+  const errBanner = document.getElementById('analyzeError');
+
+  btn.disabled = true;
+  loader.classList.add('active');
+  errBanner.classList.remove('active');
+  document.getElementById('analysisEmpty').style.display = 'none';
+  document.getElementById('analysisResults').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host, port: parseInt(port), site, username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showError('analyzeError', data.detail || `Error ${res.status}`);
+      document.getElementById('analysisEmpty').style.display = 'block';
+      return;
+    }
+    renderAnalysis(data);
+  } catch (e) {
+    showError('analyzeError', 'Network error: ' + e.message);
+    document.getElementById('analysisEmpty').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    loader.classList.remove('active');
+  }
+}
+
+// Stored lists for stat drawer
+let _statLists = {};
+
+function renderAnalysis(data) {
+  allSuggestions = data.suggestions || [];
+
+  _statLists = {
+    devices:  data.devices  || [],
+    clients:  data.clients  || [],
+    networks: data.networks || [],
+    wlans:    data.wlans    || [],
+  };
+
+  // Stats — clickable
+  const statsRow = document.getElementById('statsRow');
+  statsRow.innerHTML = [
+    { value: data.device_count,     label: 'Devices',     key: 'devices'  },
+    { value: data.client_count,     label: 'Clients',     key: 'clients'  },
+    { value: data.network_count,    label: 'Networks',    key: 'networks' },
+    { value: data.wlan_count || (data.wlans||[]).length, label: 'WLANs', key: 'wlans' },
+  ].map(s => `
+    <div class="stat-card" onclick="toggleStatDetail('${s.key}', this)">
+      <div class="stat-value">${s.value}</div>
+      <div class="stat-label">${s.label}</div>
+    </div>
+  `).join('');
+  closeStatDetail();
+
+  // Count by severity for filter badges
+  const sevCounts = {};
+  for (const s of allSuggestions) {
+    sevCounts[s.severity] = (sevCounts[s.severity] || 0) + 1;
+  }
+
+  // Update filter chips with counts
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    const sev = chip.dataset.sev;
+    if (sev === 'all') {
+      chip.textContent = `All (${allSuggestions.length})`;
+    } else if (sevCounts[sev]) {
+      chip.textContent = `${capitalize(sev)} (${sevCounts[sev]})`;
+    } else {
+      chip.textContent = capitalize(sev);
+    }
+  });
+
+  _activeSevFilter = 'all';
+  _activeStatKey = null;
+  renderSuggestions();
+  document.getElementById('analysisResults').style.display = 'block';
+  saveConfig();
+}
+
+// Map stat key → suggestion categories to filter when that stat box is open
+let _activeSevFilter = 'all';
+let _activeStatKey = null;
+
+const STAT_SUGGESTION_CATS = {
+  devices:  ['Devices'],
+  clients:  [],
+  networks: ['Networks', 'Firewall', 'DNS'],
+  wlans:    ['WiFi'],
+};
+
+function closeStatDetail() {
+  _activeStatKey = null;
+  document.getElementById('statDetail').classList.remove('active');
+  document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+  renderSuggestions();
+}
+
+function toggleStatDetail(key, card) {
+  const detail = document.getElementById('statDetail');
+  const alreadyOpen = detail.classList.contains('active') && card.classList.contains('active');
+  closeStatDetail();
+  if (alreadyOpen) return;
+
+  _activeStatKey = key;
+  card.classList.add('active');
+  document.getElementById('statDetailTitle').textContent = card.querySelector('.stat-label').textContent;
+  document.getElementById('statDetailSearch').value = '';
+  document.getElementById('statDetailTable').innerHTML = renderStatTable(key, _statLists[key] || []);
+  detail.classList.add('active');
+  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Filter suggestions to this category
+  renderSuggestions();
+}
+
+function filterStatTable() {
+  const q = document.getElementById('statDetailSearch').value.trim().toLowerCase();
+  document.querySelectorAll('#statDetailTable tbody tr').forEach(row => {
+    row.style.display = q && !row.textContent.toLowerCase().includes(q) ? 'none' : '';
+  });
+}
+
+function renderStatTable(key, items) {
+  if (!items.length) return '<tr><td style="padding:16px;color:var(--text-dim)">No items</td></tr>';
+
+  const fmtBytes = n => {
+    if (!n) return '';
+    const units = ['B','KB','MB','GB'];
+    let i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return `${n.toFixed(1)} ${units[i]}`;
+  };
+
+  if (key === 'devices') {
+    const head = `<thead><tr><th>Name</th><th>IP</th><th>Type</th><th>Model</th><th>Version</th><th>MAC</th><th>Status</th></tr></thead>`;
+    const rows = items.map(d => `<tr>
+      <td>${escHtml(d.name || '—')}</td>
+      <td>${escHtml(d.ip || '—')}</td>
+      <td>${escHtml(d.type || '—')}</td>
+      <td>${escHtml(d.model || '—')}</td>
+      <td>${escHtml(d.version || '—')}</td>
+      <td>${escHtml(d.mac || '—')}</td>
+      <td><span class="detail-badge ${d.connected ? 'detail-up' : 'detail-down'}">${d.connected ? 'Online' : 'Offline'}</span></td>
+    </tr>`).join('');
+    return head + '<tbody>' + rows + '</tbody>';
+  }
+
+  if (key === 'clients') {
+    const head = `<thead><tr><th>Hostname</th><th>IP</th><th>MAC</th><th>Network</th><th>Connection</th><th>Signal</th><th>↓ RX</th><th>↑ TX</th></tr></thead>`;
+    const rows = items.map(c => `<tr>
+      <td>${escHtml(c.hostname || '—')}</td>
+      <td>${escHtml(c.ip || '—')}</td>
+      <td>${escHtml(c.mac || '—')}</td>
+      <td>${escHtml(c.network || '—')}</td>
+      <td><span class="detail-badge ${c.wired ? 'detail-wired' : 'detail-wifi'}">${c.wired ? 'Wired' : 'Wi-Fi'}</span></td>
+      <td>${c.signal != null ? `${c.signal} dBm` : '—'}</td>
+      <td>${fmtBytes(c.rx_bytes) || '—'}</td>
+      <td>${fmtBytes(c.tx_bytes) || '—'}</td>
+    </tr>`).join('');
+    return head + '<tbody>' + rows + '</tbody>';
+  }
+
+  if (key === 'networks') {
+    const head = `<thead><tr><th>Name</th><th>Purpose</th><th>Subnet</th><th>VLAN</th><th>Status</th></tr></thead>`;
+    const rows = items.map(n => `<tr>
+      <td>${escHtml(n.name || '—')}</td>
+      <td>${escHtml(n.purpose || '—')}</td>
+      <td>${escHtml(n.subnet || '—')}</td>
+      <td>${n.vlan != null ? n.vlan : '—'}</td>
+      <td><span class="detail-badge ${n.enabled !== false ? 'detail-up' : 'detail-down'}">${n.enabled !== false ? 'Enabled' : 'Disabled'}</span></td>
+    </tr>`).join('');
+    return head + '<tbody>' + rows + '</tbody>';
+  }
+
+  if (key === 'wlans') {
+    const head = `<thead><tr><th>SSID</th><th>Security</th><th>Band</th><th>Hidden</th><th>Status</th></tr></thead>`;
+    const rows = items.map(w => `<tr>
+      <td>${escHtml(w.ssid || '—')}</td>
+      <td>${escHtml(w.security || '—')}</td>
+      <td>${escHtml(w.band || '—')}</td>
+      <td>${w.hidden ? 'Yes' : 'No'}</td>
+      <td><span class="detail-badge ${w.enabled !== false ? 'detail-up' : 'detail-down'}">${w.enabled !== false ? 'Enabled' : 'Disabled'}</span></td>
+    </tr>`).join('');
+    return head + '<tbody>' + rows + '</tbody>';
+  }
+
+  return '';
+}
+
+function filterSuggestions(sev, chip) {
+  _activeSevFilter = sev;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  if (chip) chip.classList.add('active');
+  renderSuggestions();
+}
+
+function renderSuggestions() {
+  // Apply severity filter
+  let list = _activeSevFilter === 'all'
+    ? allSuggestions
+    : allSuggestions.filter(s => s.severity === _activeSevFilter);
+
+  // Apply stat-category filter when a stat box is open
+  const cats = _activeStatKey ? STAT_SUGGESTION_CATS[_activeStatKey] : null;
+  if (cats && cats.length) {
+    list = list.filter(s => cats.includes(s.category));
+  }
+
+  const header = document.getElementById('suggCount');
+  if (_activeStatKey && cats && cats.length) {
+    const label = document.querySelector(`.stat-card.active .stat-label`)?.textContent || _activeStatKey;
+    header.textContent = `${list.length} — filtered to ${label}`;
+  } else {
+    header.textContent = allSuggestions.length;
+  }
+
+  const container = document.getElementById('suggList');
+  if (!list.length) {
+    container.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:32px">No suggestions for this filter.</p>';
+    return;
+  }
+  container.innerHTML = list.map(s => `
+    <div class="suggestion-item" data-sev="${s.severity}">
+      <div class="sug-header">
+        <span class="sug-badge ${s.severity}">${s.severity}</span>
+        <span class="sug-category">${escHtml(s.category)}</span>
+      </div>
+      <div class="sug-title">${escHtml(s.title)}</div>
+      <div class="sug-detail">${escHtml(s.detail)}</div>
+      <div class="sug-rec">${escHtml(s.recommendation)}</div>
+    </div>
+  `).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Interface discovery
+// ---------------------------------------------------------------------------
+function deviceTypeIcon(type) {
+  if (type === 'ap')
+    return '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#fbbf24;flex-shrink:0"><path d="M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>';
+  if (type === 'switch')
+    return '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#34d399;flex-shrink:0"><rect x="2" y="8" width="20" height="8" rx="2"/><circle cx="6" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="14" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1" fill="currentColor" stroke="none"/></svg>';
+  return '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#60a5fa;flex-shrink:0"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>';
+}
+
+async function loadInterfaces() {
+  const host = document.getElementById('creds-host').value.trim();
+  const apiPort = parseInt(document.getElementById('creds-api-port').value) || 443;
+  const apiSite = document.getElementById('creds-api-site').value.trim() || 'default';
+  const apiUser = document.getElementById('creds-api-user').value.trim();
+  const apiPass = document.getElementById('creds-api-pass').value;
+  const sshPort = parseInt(document.getElementById('creds-ssh-port').value) || 22;
+  const udmUser = document.getElementById('creds-udm-user').value.trim();
+  const udmPass = document.getElementById('creds-udm-pass').value;
+  const devUser = document.getElementById('creds-dev-user').value.trim();
+  const devPass = document.getElementById('creds-dev-pass').value;
+
+  if (!host) {
+    showError('ifaceError', 'Missing: UDM Host (credentials bar above).');
+    document.getElementById('creds-host').focus();
+    return;
+  }
+  if (!apiUser || !apiPass) {
+    showError('ifaceError', 'Enter API username and password in the credentials bar.');
+    document.getElementById('creds-api-user').focus();
+    return;
+  }
+  if (!udmUser) {
+    showError('ifaceError', 'Missing: UDM SSH Username.');
+    document.getElementById('creds-udm-user').focus();
+    return;
+  }
+
+  const btn = document.getElementById('loadIfaceBtn');
+  const loader = document.getElementById('ifaceLoader');
+  const errBanner = document.getElementById('ifaceError');
+
+  // Clear previous selections and all alerts
+  selectedInterfaces.clear();
+  document.querySelectorAll('.iface-card.selected').forEach(c => c.classList.remove('selected'));
+  document.getElementById('ifaceError').classList.remove('active');
+  document.getElementById('pcapError').classList.remove('active');
+  updateCaptureButton();
+
+  btn.disabled = true;
+  loader.classList.add('active');
+  errBanner.classList.remove('active');
+  document.getElementById('ifaceFilterRow').style.display = 'none';
+  document.getElementById('pcapConfigRow').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/pcap/all-interfaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        udm_host: host,
+        api_username: apiUser,
+        api_password: apiPass,
+        api_port: apiPort,
+        api_site: apiSite,
+        udm_ssh_username: udmUser,
+        udm_ssh_password: udmPass || null,
+        device_ssh_username: devUser || 'admin',
+        device_ssh_password: devPass || null,
+        ssh_port: sshPort,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showError('ifaceError', data.detail || `Error ${res.status}`);
+      return;
+    }
+    allInterfaces = data.interfaces || [];
+    selectedInterfaces.clear();
+    _activeDeviceFilter = null;
+    document.getElementById('showDownIfaces').checked = false;
+    document.getElementById('ifaceSearch').value = '';
+    document.getElementById('loadIfaceBtnLabel').textContent = 'Reload Interfaces';
+
+    // Render device chips in the bar; hide the error banner
+    document.getElementById('ifaceError').classList.remove('active');
+    renderDeviceChips(data.device_summary || []);
+
+    applyInterfaceFilters();
+    document.getElementById('ifaceFilterRow').style.display = 'flex';
+    document.getElementById('pcapConfigRow').style.display = 'flex';
+    switchToTab('pcap');
+    saveConfig();
+  } catch (e) {
+    showError('ifaceError', 'Connection error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    loader.classList.remove('active');
+  }
+}
+
+function renderDeviceChips(devices) {
+  const bar = document.getElementById('deviceBar');
+  const container = document.getElementById('deviceChips');
+  if (!devices.length) { bar.classList.remove('visible'); container.innerHTML = ''; return; }
+  const sorted = [...devices].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  container.innerHTML = sorted.map(d =>
+    `<span class="device-chip" data-ip="${escHtml(d.ip)}" onclick="toggleDeviceFilter('${escHtml(d.ip)}')">${escHtml(d.name.toUpperCase())}</span>`
+  ).join('');
+  bar.classList.add('visible');
+}
+
+function toggleDeviceFilter(ip) {
+  _activeDeviceFilter = _activeDeviceFilter === ip ? null : ip;
+  document.querySelectorAll('.device-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.ip === _activeDeviceFilter);
+  });
+  // Show Live Logs button only when a device is selected
+  document.getElementById('liveLogsBtn').style.display = _activeDeviceFilter ? 'inline-flex' : 'none';
+  applyInterfaceFilters();
+}
+
+function applyInterfaceFilters() {
+  const q = document.getElementById('ifaceSearch').value.trim().toLowerCase();
+  const showDown = document.getElementById('showDownIfaces').checked;
+
+  let list = allInterfaces;
+  if (_activeDeviceFilter) list = list.filter(i => i.device_ip === _activeDeviceFilter);
+  if (!showDown) list = list.filter(i => i.state === 'up');
+
+  if (q) {
+    list = list.filter(i =>
+      i.name.toLowerCase().includes(q) ||
+      (i.port_label || '').toLowerCase().includes(q) ||
+      (i.device_name || '').toLowerCase().includes(q) ||
+      (i.device_ip || '').toLowerCase().includes(q) ||
+      (i.network_name || '').toLowerCase().includes(q) ||
+      (i.ips || []).some(ip => ip.address.includes(q)) ||
+      String(i.vlan_id || '').includes(q)
+    );
+  }
+
+  // Sort: device name alphabetically, then port label/name alphabetically within each device
+  list = [...list].sort((a, b) => {
+    const devA = (a.device_name || a.device_ip || '').toLowerCase();
+    const devB = (b.device_name || b.device_ip || '').toLowerCase();
+    if (devA !== devB) return devA.localeCompare(devB);
+    const nameA = (a.port_label || a.name || '').toLowerCase();
+    const nameB = (b.port_label || b.name || '').toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
+  renderInterfaceList(list);
+}
+
+function renderInterfaceList(list) {
+  const container = document.getElementById('ifaceList');
+  const countEl = document.getElementById('ifaceCount');
+  const titleEl = document.getElementById('ifacePickerTitle');
+
+  // Update panel title to reflect active device filter
+  if (_activeDeviceFilter) {
+    const dev = allInterfaces.find(i => i.device_ip === _activeDeviceFilter);
+    titleEl.textContent = dev ? dev.device_name : _activeDeviceFilter;
+  } else {
+    titleEl.textContent = 'All Interfaces';
+  }
+
+  const scopedTotal = _activeDeviceFilter
+    ? allInterfaces.filter(i => i.device_ip === _activeDeviceFilter).length
+    : allInterfaces.length;
+  countEl.textContent = `${list.length} of ${scopedTotal}`;
+
+  if (!list.length) {
+    container.innerHTML = '<div class="iface-empty">No interfaces found</div>';
+    return;
+  }
+
+  // Hide device badge when filtered to a single device (it's redundant)
+  const showDeviceBadge = !_activeDeviceFilter;
+
+  container.innerHTML = list.map(iface => {
+    const key = `${iface.device_ip}::${iface.name}`;
+    const isSelected = selectedInterfaces.has(key);
+    const isDown = iface.state === 'down';
+    const notCapturable = iface.capturable === false;
+    const typeClass = `iface-type-${iface.type || 'other'}`;
+
+    const globalIps = (iface.ips || []).filter(ip => ip.scope === 'global' || ip.scope === 'host');
+    const ipsText = globalIps.map(ip => ip.address).join('  ');
+
+    const metaParts = [];
+    if (iface.mac) metaParts.push(iface.mac);
+    if (iface.mtu) metaParts.push(`MTU ${iface.mtu}`);
+    if (iface.link_speed != null) {
+      const spd = iface.link_speed >= 1000 ? `${iface.link_speed/1000}G` : `${iface.link_speed}M`;
+      metaParts.push(`${spd}bps`);
+    }
+    if (iface.master) metaParts.push(`member of ${iface.master}`);
+    else if (iface.parent) metaParts.push(`parent: ${iface.parent}`);
+
+    const bvlans = (iface.bridge_vlans || []);
+    const vlanStr = bvlans.length ? `VLANs: ${bvlans.join(', ')}` : '';
+
+    const rxStr = iface.rx_bytes ? `↓ ${fmtBytes(iface.rx_bytes)}` : '';
+    const txStr = iface.tx_bytes ? `↑ ${fmtBytes(iface.tx_bytes)}` : '';
+
+    // Connected clients / uplink device
+    const connClients = iface.connected_clients || [];
+    const connDevice  = iface.connected_device || null;
+    const MAX_CLIENTS = 3;
+    let connectedHtml = '';
+    if (connDevice) {
+      connectedHtml = `<div class="iface-connected">
+        <div class="iface-connected-label">Uplink device</div>
+        <div class="iface-connected-device">${deviceTypeIcon(connDevice.type)}${escHtml(connDevice.name)}${connDevice.ip ? ` <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(${escHtml(connDevice.ip)})</span>` : ''}</div>
+      </div>`;
+    } else if (connClients.length > 0) {
+      const shown = connClients.slice(0, MAX_CLIENTS);
+      const rest  = connClients.length - shown.length;
+      const items = shown.map(c => {
+        const label = c.hostname || c.mac || 'unknown';
+        return `<div class="iface-connected-item"><span class="conn-host">${escHtml(label)}</span>${c.ip ? `<span class="conn-ip">${escHtml(c.ip)}</span>` : ''}</div>`;
+      }).join('');
+      const moreHtml = rest > 0 ? `<div class="iface-connected-more">+${rest} more</div>` : '';
+      connectedHtml = `<div class="iface-connected">
+        <div class="iface-connected-label">Connected (${connClients.length})</div>
+        ${items}${moreHtml}
+      </div>`;
+    }
+
+    const deviceBadge = showDeviceBadge && iface.device_name ? `
+      <div class="iface-device" style="cursor:pointer" onclick="event.stopPropagation();toggleDeviceFilter('${escHtml(iface.device_ip)}')" title="Filter to this device">
+        ${deviceTypeIcon(iface.device_type)}
+        <span class="iface-dev-name">${escHtml(iface.device_name)}</span>
+        <span class="device-type-badge device-type-${escHtml(iface.device_type || 'gateway')}">${escHtml(iface.device_type || '')}</span>
+      </div>` : '';
+
+    const blockCapture = isDown || notCapturable;
+    const canCapture = !isDown && !notCapturable;
+    return `<div class="iface-card ${isSelected ? 'selected' : ''} ${isDown ? 'down' : ''} ${blockCapture ? 'no-capture' : ''} ${canCapture ? 'capturable' : ''}" data-key="${escHtml(key)}" ${blockCapture ? 'data-no-capture="1"' : ''}>
+      ${deviceBadge}
+      <div class="iface-port-name">
+        ${ifaceIcon(iface.type)}
+        <span class="iface-name">${iface.port_label ? escHtml(iface.port_label) : escHtml(iface.name)}</span>
+        ${iface.port_label ? `<span style="font-size:10px;color:var(--text-dim);margin-left:2px">(${escHtml(iface.name)})</span>` : ''}
+      </div>
+      <div class="iface-header">
+        <span class="iface-type-badge ${typeClass}">${iface.type || 'other'}</span>
+        ${iface.vlan_id ? `<span class="iface-vlans">VLAN ${iface.vlan_id}</span>` : ''}
+        <span class="iface-state-${iface.state}" style="margin-left:auto">${iface.state === 'up' ? 'LINK UP' : 'NO LINK'}</span>
+      </div>
+      ${iface.network_name ? `<div class="iface-network">&#9632; ${escHtml(iface.network_name)}</div>` : ''}
+      ${ipsText ? `<div class="iface-ips">${escHtml(ipsText)}</div>` : `<div class="iface-meta" style="color:var(--text-dim);font-style:italic">no IP — layer-2 / bridge port</div>`}
+      ${metaParts.length ? `<div class="iface-meta">${escHtml(metaParts.join(' · '))}</div>` : ''}
+      ${vlanStr ? `<div class="iface-vlans">${escHtml(vlanStr)}</div>` : ''}
+      ${notCapturable && !isDown ? `<div class="iface-meta" style="color:var(--text-dim);font-style:italic;font-size:10px">capture not supported on switches</div>` : ''}
+      ${(rxStr || txStr) ? `<div class="iface-traffic"><span>${rxStr}</span><span>${txStr}</span></div>` : ''}
+      ${connectedHtml}
+    </div>`;
+  }).join('');
+}
+
+function selectInterfaceByKey(key) {
+  if (selectedInterfaces.has(key)) {
+    selectedInterfaces.delete(key);
+  } else {
+    selectedInterfaces.add(key);
+  }
+  document.querySelectorAll('.iface-card').forEach(card => {
+    card.classList.toggle('selected', selectedInterfaces.has(card.dataset.key));
+  });
+  updateCaptureButton();
+}
+
+function updateCaptureButton() {
+  const btn = document.getElementById('pcapBtn');
+  const labelEl = document.getElementById('pcapBtnLabel');
+  const clearBtn = document.getElementById('clearSelBtn');
+  const count = selectedInterfaces.size;
+  if (count === 0) {
+    labelEl.textContent = 'Select an interface to capture';
+    btn.disabled = true;
+    btn.classList.remove('ready');
+    clearBtn.style.display = 'none';
+  } else if (count === 1) {
+    const key = [...selectedInterfaces][0];
+    const iface = allInterfaces.find(i => `${i.device_ip}::${i.name}` === key);
+    const parts = [];
+    if (iface?.device_name) parts.push(iface.device_name);
+    parts.push(iface?.name || key.split('::')[1]);
+    if (iface?.network_name) parts.push(iface.network_name);
+    else if (iface?.vlan_id) parts.push(`VLAN ${iface.vlan_id}`);
+    labelEl.textContent = `Capture  ${parts.join('  ·  ')}`;
+    btn.disabled = false;
+    btn.classList.add('ready');
+    clearBtn.style.display = 'inline-flex';
+  } else {
+    labelEl.textContent = `Capture ${count} interfaces`;
+    btn.disabled = false;
+    btn.classList.add('ready');
+    clearBtn.style.display = 'inline-flex';
+  }
+}
+
+function clearSelectedInterfaces() {
+  selectedInterfaces.clear();
+  document.querySelectorAll('.iface-card.selected').forEach(c => c.classList.remove('selected'));
+  updateCaptureButton();
+}
+
+function exportInterfacesCsv() {
+  if (!allInterfaces.length) return;
+
+  const cols = [
+    'device_name', 'device_type', 'device_ip',
+    'port_label', 'name', 'type', 'state',
+    'ip_addresses', 'mac', 'mtu', 'link_speed_mbps',
+    'vlan_id', 'network_name', 'bridge_vlans',
+    'rx_bytes', 'tx_bytes', 'rx_mb', 'tx_mb', 'rx_gb', 'tx_gb', 'capturable',
+  ];
+
+  const sorted = [...allInterfaces].sort((a, b) => {
+    const da = (a.device_name || a.device_ip || '').toLowerCase();
+    const db = (b.device_name || b.device_ip || '').toLowerCase();
+    if (da !== db) return da < db ? -1 : 1;
+    const na = (a.port_label || a.name || '').toLowerCase();
+    const nb = (b.port_label || b.name || '').toLowerCase();
+    return na < nb ? -1 : na > nb ? 1 : 0;
+  });
+
+  function csvCell(v) {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+
+  const rows = [cols.join(',')];
+  for (const iface of sorted) {
+    const ips = (iface.ips || []).map(i => i.address).join(' | ');
+    const bvlans = (iface.bridge_vlans || []).join(' | ');
+    const spd = iface.link_speed != null ? iface.link_speed : '';
+    const row = [
+      iface.device_name || '', iface.device_type || '', iface.device_ip || '',
+      iface.port_label || '', iface.name || '', iface.type || '', iface.state || '',
+      ips, iface.mac || '', iface.mtu || '', spd,
+      iface.vlan_id != null ? iface.vlan_id : '', iface.network_name || '', bvlans,
+      iface.rx_bytes || 0, iface.tx_bytes || 0,
+      iface.rx_bytes ? (iface.rx_bytes / 1048576).toFixed(2) : '0.00', iface.tx_bytes ? (iface.tx_bytes / 1048576).toFixed(2) : '0.00',
+      iface.rx_bytes ? (iface.rx_bytes / 1073741824).toFixed(4) : '0.0000', iface.tx_bytes ? (iface.tx_bytes / 1073741824).toFixed(4) : '0.0000',
+      iface.capturable === false ? 'No' : 'Yes',
+    ].map(csvCell);
+    rows.push(row.join(','));
+  }
+
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+  const blob = new Blob([rows.join('\r\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `interfaces_${ts}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
+// Config Export
+// ---------------------------------------------------------------------------
+let _exportJobId = null;
+let _exportEvtSource = null;
+let _exportData = null;   // { sites: { siteName: { networks, wifi, firewall, ... } } }
+let _exportSite = null;   // currently selected site name
+let _exportSection = 'networks';
+
+async function runConfigExport() {
+  const host     = document.getElementById('creds-host').value.trim();
+  const username = document.getElementById('creds-api-user').value.trim();
+  const password = document.getElementById('creds-api-pass').value;
+
+  if (!host || !username || !password) {
+    showError('exportError', 'UDM host, API username and password are required (set in the credentials bar above).');
+    return;
+  }
+
+  document.getElementById('exportError').textContent = '';
+  document.getElementById('exportError').classList.remove('active');
+  document.getElementById('exportDownloads').style.display = 'none';
+  document.getElementById('exportDataViewer').style.display = 'none';
+  document.getElementById('exportOutput').style.display = 'none';
+  document.getElementById('exportOutput').textContent = '';
+  document.getElementById('exportProgress').style.display = 'flex';
+  _exportJobId = null;
+  _exportData = null;
+
+  const btn = document.getElementById('exportRunBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Running…';
+
+  if (_exportEvtSource) { _exportEvtSource.close(); _exportEvtSource = null; }
+
+  const humanize = document.getElementById('export-humanize').checked;
+  const stripIds = document.getElementById('export-strip-ids').checked;
+
+  const params = new URLSearchParams({ host, username, password, humanize_epochs: humanize, strip_all_ids: stripIds });
+  _exportEvtSource = new EventSource(`/api/export-config/run?${params}`);
+
+  _exportEvtSource.onmessage = async (e) => {
+    const line = e.data;
+
+    if (line.startsWith('\x00JOBID\x00 ')) {
+      _exportJobId = line.slice('\x00JOBID\x00 '.length).trim();
+      return;
+    }
+
+    // Update progress text with meaningful log lines
+    if (!line.startsWith('\x00') && line.trim()) {
+      document.getElementById('exportProgressText').textContent = line.replace(/^\[.\] /, '');
+    }
+
+    if (line.startsWith('\x00DONE\x00 ')) {
+      const exitCode = parseInt((line.split(' ')[1] || '1'), 10);
+      _exportEvtSource.close();
+      _exportEvtSource = null;
+      document.getElementById('exportProgress').style.display = 'none';
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg> Run Export';
+
+      if (exitCode === 0 && _exportJobId) {
+        document.getElementById('exportDownloads').style.display = 'flex';
+        await loadExportPreview(_exportJobId);
+      } else if (exitCode !== 0) {
+        showError('exportError', 'Export failed. See error details below.');
+      }
+      return;
+    }
+
+    if (line.startsWith('\x00ERROR\x00 ')) {
+      const errText = line.slice('\x00ERROR\x00 '.length);
+      const output = document.getElementById('exportOutput');
+      output.style.display = 'block';
+      const span = document.createElement('span');
+      span.style.color = '#ff6b6b';
+      span.style.whiteSpace = 'pre-wrap';
+      span.textContent = errText + '\n';
+      output.appendChild(span);
+      return;
+    }
+  };
+
+  _exportEvtSource.onerror = () => {
+    _exportEvtSource.close();
+    _exportEvtSource = null;
+    document.getElementById('exportProgress').style.display = 'none';
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg> Run Export';
+    showError('exportError', 'Connection to server lost during export.');
+  };
+}
+
+async function runConfigLookup() {
+  const host     = document.getElementById('creds-host').value.trim();
+  const username = document.getElementById('creds-api-user').value.trim();
+  const password = document.getElementById('creds-api-pass').value;
+  if (!host || !username || !password) {
+    showError('exportError', 'UDM host, API username and password are required (set in the credentials bar above).');
+    return;
+  }
+  document.getElementById('exportError').textContent = '';
+  document.getElementById('exportError').classList.remove('active');
+  document.getElementById('exportDataViewer').style.display = 'none';
+  document.getElementById('exportOutput').style.display = 'none';
+  document.getElementById('exportProgress').style.display = 'flex';
+  document.getElementById('exportProgressText').textContent = 'Fetching configuration from controller…';
+
+  const btn = document.getElementById('configLookupBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Loading…';
+
+  try {
+    const apiKey = document.getElementById('creds-api-key').value.trim();
+    const site = document.getElementById('creds-api-site').value.trim() || 'default';
+    const params = new URLSearchParams({ host, username, password, site, ...(apiKey && { api_key: apiKey }) });
+    const res = await fetch(`/api/config-lookup/fetch?${params}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    const data = await res.json();
+    // Show integration API error as a warning if present
+    if (data.integration_error) {
+      showError('exportError', `Integration API warning: ${data.integration_error}`);
+    }
+    // Wrap flat response into the { sites: { siteName: {...} } } shape the renderer expects
+    const siteName = data.site || 'default';
+    _exportData = { sites: { [siteName]: data } };
+    _exportSite = siteName;
+    _exportSection = 'networks';
+    renderExportSiteTabs([siteName]);
+    renderExportSectionTabs();
+    renderExportTable();
+    document.getElementById('exportDataViewer').style.display = 'flex';
+    document.getElementById('exportDataViewer').style.flexDirection = 'column';
+  } catch (err) {
+    showError('exportError', `Failed to load config: ${err.message}`);
+  } finally {
+    document.getElementById('exportProgress').style.display = 'none';
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg> Load Config';
+  }
+}
+
+async function loadExportPreview(jobId) {
+  try {
+    const res = await fetch(`/api/export-config/preview/${jobId}`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const siteNames = Object.keys(data.sites || {});
+    if (siteNames.length) {
+      _exportData = data;
+      _exportSite = siteNames[0];
+      _exportSection = 'networks';
+      renderExportSiteTabs(siteNames);
+      renderExportSectionTabs();
+      renderExportTable();
+      document.getElementById('exportDataViewer').style.display = 'flex';
+      document.getElementById('exportDataViewer').style.flexDirection = 'column';
+    }
+  } catch (err) {
+    // Non-fatal — data is still downloadable even if preview fails
+    console.warn('Preview load failed:', err.message);
+  }
+}
+
+function renderExportSiteTabs(siteNames) {
+  const bar = document.getElementById('exportSiteTabs');
+  bar.innerHTML = '';
+  if (siteNames.length <= 1) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  for (const name of siteNames) {
+    const btn = document.createElement('button');
+    btn.className = 'export-site-tab' + (name === _exportSite ? ' active' : '');
+    btn.textContent = name;
+    btn.onclick = () => { _exportSite = name; renderExportSiteTabs(siteNames); renderExportTable(); };
+    bar.appendChild(btn);
+  }
+}
+
+function renderExportSectionTabs() {
+  document.querySelectorAll('.export-sec-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sec === _exportSection);
+  });
+}
+
+function switchExportSection(sec) {
+  _exportSection = sec;
+  renderExportSectionTabs();
+  renderExportTable();
+}
+
+function _badge(val, trueLabel, falseLabel) {
+  if (val === true || val === 'true' || val === 1)
+    return `<span class="badge badge-yes">${trueLabel || 'Yes'}</span>`;
+  if (val === false || val === 'false' || val === 0)
+    return `<span class="badge badge-no">${falseLabel || 'No'}</span>`;
+  return val != null ? String(val) : '<span style="color:var(--text-dim)">—</span>';
+}
+
+function _cell(val) {
+  if (val == null || val === '') return '<span style="color:var(--text-dim)">—</span>';
+  return String(val);
+}
+
+// Sort state per section: { [sec]: { col, dir } }
+const _exportSortState = {};
+
+function _sortRows(rows, col, dir) {
+  if (!col) return rows;
+  return [...rows].sort((a, b) => {
+    let av = a[col], bv = b[col];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const an = parseFloat(av), bn = parseFloat(bv);
+    if (!isNaN(an) && !isNaN(bn)) return dir === 'asc' ? an - bn : bn - an;
+    av = String(av).toLowerCase();
+    bv = String(bv).toLowerCase();
+    return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+}
+
+function _buildTable(cols, rows, cellFn, sortCol, sortDir) {
+  const thCells = cols.map(c => {
+    const label = c.replace(/_/g, ' ');
+    const isActive = c === sortCol;
+    const arrow = isActive ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    const style = isActive ? 'color:var(--accent);' : '';
+    return `<th data-col="${c}" style="${style}cursor:pointer;user-select:none">${label}${arrow}</th>`;
+  }).join('');
+  const rowCells = rows.map(r =>
+    '<tr>' + cols.map(c => cellFn(c, r[c], r)).join('') + '</tr>'
+  ).join('');
+  return `<table><thead><tr>${thCells}</tr></thead><tbody>${rowCells}</tbody></table>`;
+}
+
+function _attachSortHandlers(sec) {
+  document.querySelectorAll('#exportTableArea th[data-col]').forEach(th => {
+    th.onclick = () => {
+      const col = th.dataset.col;
+      const cur = _exportSortState[sec] || {};
+      _exportSortState[sec] = { col, dir: cur.col === col && cur.dir === 'asc' ? 'desc' : 'asc' };
+      renderExportTable();
+    };
+  });
+}
+
+function _defaultSort(sec, rows) {
+  const state = _exportSortState[sec];
+  if (state) return _sortRows(rows, state.col, state.dir);
+  // Default: alphabetical by name (or hostname for clients)
+  const nameKey = rows.length && 'hostname' in rows[0] ? 'hostname' : 'name';
+  if (rows.length && nameKey in rows[0]) return _sortRows(rows, nameKey, 'asc');
+  return rows;
+}
+
+function renderExportTable() {
+  const area = document.getElementById('exportTableArea');
+  if (!_exportData || !_exportSite) { area.innerHTML = '<div class="empty-note">No data.</div>'; return; }
+  const site = _exportData.sites[_exportSite] || {};
+  const rawRows = site[_exportSection] || [];
+
+  if (!rawRows.length) {
+    area.innerHTML = `<div class="empty-note">No ${_exportSection} data for site <strong>${_exportSite}</strong>.</div>`;
+    const rc = document.getElementById('exportRowCount'); if (rc) rc.textContent = '0 rows';
+    return;
+  }
+
+  const sec = _exportSection;
+  const { col: sortCol, dir: sortDir } = _exportSortState[sec] || {};
+  const rows = _defaultSort(sec, rawRows);
+  let html = '';
+
+  if (sec === 'networks') {
+    html = `<div id="exportSummaryBar">${renderSummaryBar(site.summary)}</div>`;
+    const cols = ['name', 'purpose', 'ip_subnet', 'enabled'];
+    html += _buildTable(cols, rows, (c, v) => {
+      if (c === 'enabled') return `<td>${_badge(v)}</td>`;
+      if (c === 'ip_subnet') return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
+      if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'wifi') {
+    const cols = ['name', 'security', 'band', 'vlan_id', 'hide_ssid', 'enabled'];
+    html = _buildTable(cols, rows, (c, v) => {
+      if (c === 'security') return `<td><span class="badge badge-blue">${_cell(v)}</span></td>`;
+      if (c === 'hide_ssid') return `<td>${_badge(v, 'Hidden', 'Visible')}</td>`;
+      if (c === 'enabled') return `<td>${_badge(v)}</td>`;
+      if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'policy_groups') {
+    if (!rows.length) {
+      html = '<div class="empty-note">No Policy Groups Found</div>';
+    } else {
+      const cols = ['name', 'type', 'count', 'members'];
+      html = _buildTable(cols, rows, (c, v) => {
+        if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+        if (c === 'type') return `<td><span class="badge badge-blue">${_cell(v)}</span></td>`;
+        if (c === 'count') return `<td style="text-align:center">${_cell(v)}</td>`;
+        if (c === 'members') return `<td style="font-family:var(--mono);font-size:11px;word-break:break-all">${_cell(v)}</td>`;
+        return `<td>${_cell(v)}</td>`;
+      }, sortCol, sortDir);
+    }
+
+  } else if (sec === 'dns_records') {
+    const cols = ['domain', 'type', 'value', 'ttl', 'enabled', 'priority', 'weight', 'port'];
+    html = _buildTable(cols, rows, (c, v) => {
+      if (c === 'domain') return `<td><strong>${_cell(v)}</strong></td>`;
+      if (c === 'enabled') return `<td>${_badge(v)}</td>`;
+      if (c === 'value') return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'firewall_zones') {
+    const cols = ['name', 'networks'];
+    html = _buildTable(cols, rows, (c, v) => {
+      if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'firewall') {
+    const allKeys = rawRows.length ? Object.keys(rawRows[0]) : [];
+    // priority covers integration API policy fields
+    const priority = ['name', 'action', 'enabled', 'protocol', 'logging',
+                      'src_zone', 'dst_zone', 'src_address', 'dst_address', 'src_port', 'dst_port',
+                      'description', 'policy_id',
+                      'protocol', 'enabled', 'logging',
+                      'src_ips', 'src_ports', 'src_groups', 'src_address', 'src_port',
+                      'description', 'policy_id'];
+    const cols = [...priority.filter(c => allKeys.includes(c)), ...allKeys.filter(c => !priority.includes(c))];
+    html = _buildTable(cols, rows, (c, v) => {
+      if (c === 'action') return `<td><span class="badge ${v === 'accept' || v === 'allow' ? 'badge-yes' : v === 'drop' || v === 'reject' || v === 'block' ? 'badge-no' : 'badge-blue'}">${_cell(v)}</span></td>`;
+      if (c === 'enabled' || c === 'logging') return `<td>${_badge(v)}</td>`;
+      if (c.includes('address') || c.includes('port')) return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
+      if (c === 'policy_id') return `<td style="font-family:var(--mono);font-size:10px">${_cell(v)}</td>`;
+      if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'port_forward') {
+    if (!rows.length) {
+      html = '<div class="empty-note">No Port Forwards Found</div>';
+    } else {
+      const cols = ['name', 'enabled', 'proto', 'dst_port', 'fwd', 'fwd_port', 'src', 'interface', 'destination_ip', 'logging'];
+      html = _buildTable(cols, rows, (c, v) => {
+        if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+        if (c === 'proto') return `<td><span class="badge badge-blue">${_cell(v)}</span></td>`;
+        if (c === 'enabled' || c === 'logging') return `<td>${_badge(v)}</td>`;
+        if (['dst_port','fwd','fwd_port','src','destination_ip'].includes(c)) return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
+        return `<td>${_cell(v)}</td>`;
+      }, sortCol, sortDir);
+    }
+
+  } else if (sec === 'devices') {
+    const cols = ['name', 'model', 'ip', 'mac', 'type', 'state'];
+    html = _buildTable(cols, rows, (c, v) => {
+      if (c === 'state') {
+        const color = v == 1 ? '#22c55e' : '#ef4444';
+        const label = v == 1 ? 'Online' : v == 0 ? 'Offline' : _cell(v);
+        return `<td><span style="color:${color};font-weight:600">${label}</span></td>`;
+      }
+      if (c === 'ip') return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
+      if (c === 'mac') return `<td style="font-family:var(--mono);font-size:10px">${_cell(v)}</td>`;
+      if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'clients') {
+    const cols = ['hostname', 'ip', 'mac', 'network', 'oui', 'is_wired'];
+    html = _buildTable(cols, rows, (c, v) => {
+      if (c === 'is_wired') return `<td>${v === true || v === 'true' ? '<span class="badge badge-blue">Wired</span>' : '<span class="badge badge-yes">Wireless</span>'}</td>`;
+      if (c === 'ip') return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
+      if (c === 'mac') return `<td style="font-family:var(--mono);font-size:10px">${_cell(v)}</td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'port_profiles') {
+    const allKeys = rawRows.length ? Object.keys(rawRows[0]) : [];
+    const cols = ['name', ...allKeys.filter(k => k !== 'name')];
+    const boolCols = new Set(['enabled','autoneg','full_duplex','isolation','lldpmed_enabled','lldpmed_notify_enabled','dot1x_enabled']);
+    html = _buildTable(cols, rows, (c, v) => {
+      if (boolCols.has(c)) return `<td>${_badge(v)}</td>`;
+      if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'routing') {
+    const allKeys = rawRows.length ? Object.keys(rawRows[0]) : [];
+    const priority = ['name', 'type', 'enabled', 'gateway_type', 'static_route_network', 'static_route_next_hop', 'static_route_distance'];
+    const cols = [...priority.filter(k => allKeys.includes(k)), ...allKeys.filter(k => !priority.includes(k))];
+    html = _buildTable(cols, rows, (c, v) => {
+      if (c === 'enabled') return `<td>${_badge(v)}</td>`;
+      if (c === 'static_route_network' || c === 'static_route_next_hop') return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
+      if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
+      return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+  }
+
+  area.innerHTML = html;
+  _attachSortHandlers(sec);
+  const rc = document.getElementById('exportRowCount');
+  if (rc) rc.textContent = rows.length ? `${rows.length} row${rows.length !== 1 ? 's' : ''}` : '';
+}
+
+function renderSummaryBar(summary) {
+  if (!summary) return '';
+  const stats = [
+    { val: summary.site, lbl: 'Site' },
+    { val: summary.device_count, lbl: 'Devices' },
+    { val: summary.client_active_count, lbl: 'Active Clients' },
+    { val: summary.event_count, lbl: 'Events' },
+  ];
+  return stats.filter(s => s.val != null).map(s =>
+    `<div class="exp-stat"><span class="exp-stat-val">${s.val}</span><span class="exp-stat-lbl">${s.lbl}</span></div>`
+  ).join('');
+}
+
+function downloadExport(type) {
+  if (!_exportJobId) return;
+  const a = document.createElement('a');
+  a.href = `/api/export-config/download/${_exportJobId}/${type}`;
+  a.click();
+}
+
+function exportTableCSV() {
+  if (!_exportData || !_exportSite) return;
+  const rows = (_exportData.sites[_exportSite] || {})[_exportSection] || [];
+  if (!rows.length) { alert('No data to export.'); return; }
+  const cols = Object.keys(rows[0]);
+  const esc = v => { const s = v == null ? '' : String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = `unifi_${_exportSection}_${_exportSite}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportAllToExcel() {
+  if (!_exportData || !_exportSite) { alert('No data loaded.'); return; }
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded. Please refresh the page.'); return; }
+  const site = _exportData.sites[_exportSite] || {};
+  const sections = [
+    { key: 'networks',       name: 'Networks' },
+    { key: 'wifi',           name: 'Wi-Fi' },
+    { key: 'firewall_zones', name: 'Firewall Zones' },
+    { key: 'firewall',       name: 'Firewall Policies' },
+    { key: 'policy_groups',  name: 'Policy Groups' },
+    { key: 'dns_records',    name: 'DNS Records' },
+    { key: 'routing',        name: 'Routing' },
+    { key: 'port_forward',   name: 'Port Forwards' },
+    { key: 'port_profiles',  name: 'Port Profiles' },
+    { key: 'devices',        name: 'Devices' },
+    { key: 'clients',        name: 'Clients' },
+  ];
+  const wb = XLSX.utils.book_new();
+  for (const sec of sections) {
+    const rows = site[sec.key];
+    const ws = (rows && rows.length) ? XLSX.utils.json_to_sheet(rows) : XLSX.utils.aoa_to_sheet([['No data available']]);
+    XLSX.utils.book_append_sheet(wb, ws, sec.name);
+  }
+  XLSX.writeFile(wb, `unifi_config_${_exportSite}.xlsx`);
+}
+
+function ifaceIcon(type) {
+  const icons = {
+    ethernet: '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#60a5fa"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>',
+    bridge:   '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#a78bfa"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
+    vlan:     '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#34d399"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
+    wireless: '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#fbbf24"><path d="M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>',
+    bond:     '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#f97316"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>',
+    tunnel:   '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#94a3b8"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>',
+  };
+  return icons[type] || icons.ethernet;
+}
+
+function fmtBytes(n) {
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(1)} ${units[i]}`;
+}
+
+// ---------------------------------------------------------------------------
+// PCAP
+// ---------------------------------------------------------------------------
+async function runPcap() {
+  const sshPort = parseInt(document.getElementById('creds-ssh-port').value) || 22;
+  const udmUser = document.getElementById('creds-udm-user').value.trim();
+  const udmPass = document.getElementById('creds-udm-pass').value;
+  const devUser = document.getElementById('creds-dev-user').value.trim();
+  const devPass = document.getElementById('creds-dev-pass').value;
+
+  if (selectedInterfaces.size === 0) {
+    showError('pcapError', 'Please load and select at least one interface first.');
+    return;
+  }
+  if (!udmUser) {
+    showError('pcapError', 'Missing: UDM SSH Username (credentials bar above).');
+    document.getElementById('creds-udm-user').focus();
+    return;
+  }
+
+  // Build per-interface capture tasks from compound keys
+  const selectedKeys = [...selectedInterfaces];
+  const tasks = selectedKeys.map(key => {
+    const sep = key.indexOf('::');
+    const deviceIp = key.slice(0, sep);
+    const ifaceName = key.slice(sep + 2);
+    const iface = allInterfaces.find(i => i.device_ip === deviceIp && i.name === ifaceName);
+    const isGateway = iface?.device_type === 'gateway';
+    return {
+      key, deviceIp, ifaceName,
+      deviceName: iface?.device_name || deviceIp,
+      sshUser: isGateway ? udmUser : (devUser || 'admin'),
+      sshPass: isGateway ? udmPass : devPass,
+    };
+  });
+
+  const dur = parseInt(document.getElementById('pc-dur').value) || 30;
+  const countRaw = document.getElementById('pc-count').value.trim();
+  const bpf = document.getElementById('pc-filter').value.trim();
+  const desc = document.getElementById('pc-desc').value.trim();
+  const maxDisplay = parseInt(document.getElementById('pc-maxdisplay').value) || 1000;
+  const maxTime = countRaw ? dur + 30 : dur;
+
+  const btn = document.getElementById('pcapBtn');
+  const errBanner = document.getElementById('pcapError');
+  const progress = document.getElementById('captureProgress');
+
+  btn.disabled = true;
+  btn.classList.remove('ready');
+  errBanner.classList.remove('active');
+  document.getElementById('pcapEmpty').style.display = 'none';
+  document.getElementById('pcapResults').style.display = 'none';
+  document.getElementById('copiedBanner').classList.remove('active');
+  pcapResults = [];
+
+  // Reset PCAP Viewer tab
+  const viewerTabBtn = document.getElementById('viewerTabBtn');
+  viewerTabBtn.disabled = true;
+  viewerTabBtn.classList.remove('viewer-ready');
+  document.getElementById('pcapText').textContent = '';
+  // If the viewer tab is currently active, switch back to interfaces
+  if (viewerTabBtn.classList.contains('active')) switchToTab('pcap');
+
+  let elapsed = 0;
+  progress.classList.add('active');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progLabel').textContent =
+    tasks.length > 1
+      ? `Capturing on ${tasks.length} interfaces in parallel...`
+      : `Capturing on ${tasks[0].deviceName} / ${tasks[0].ifaceName}...`;
+  document.getElementById('progTime').textContent = `0s / ${dur}s`;
+  captureTimer = setInterval(() => {
+    elapsed++;
+    const pct = Math.min(100, (elapsed / maxTime) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progTime').textContent = `${elapsed}s / ${dur}s`;
+  }, 1000);
+
+  const results = await Promise.allSettled(tasks.map(task => {
+    const body = {
+      host: task.deviceIp,
+      ssh_username: task.sshUser,
+      ssh_password: task.sshPass || null,
+      ssh_port: sshPort,
+      interface: task.ifaceName,
+      duration: dur,
+      packet_count: countRaw ? parseInt(countRaw) : null,
+      bpf_filter: bpf,
+      description: desc || `Capture on ${task.deviceName} interface ${task.ifaceName}`,
+      max_display_packets: maxDisplay,
+    };
+    return fetch('/api/pcap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout((maxTime + 30) * 1000),
+    }).then(res => res.json().then(data => ({ task, res, data })));
+  }));
+
+  clearInterval(captureTimer);
+  progress.classList.remove('active');
+  btn.disabled = false;
+  btn.classList.add('ready');
+
+  const errors = [];
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      errors.push(r.reason?.message || 'Unknown error');
+      continue;
+    }
+    const { task, res, data } = r.value;
+    if (!res.ok) {
+      errors.push(`${task.deviceName}/${task.ifaceName}: ${data.detail || `Error ${res.status}`}`);
+      continue;
+    }
+    pcapResults.push({
+      interface: task.ifaceName,
+      deviceName: task.deviceName,
+      deviceIp: task.deviceIp,
+      text: data.text || '',
+      fullText: data.full_text || data.text || '',
+      sizeBytes: data.pcap_size_bytes || 0,
+      downloadId: data.download_id || null,
+    });
+  }
+
+  pcapResults.sort((a, b) => {
+    const ka = `${a.deviceIp}::${a.interface}`;
+    const kb = `${b.deviceIp}::${b.interface}`;
+    return selectedKeys.indexOf(ka) - selectedKeys.indexOf(kb);
+  });
+
+  if (errors.length) showError('pcapError', errors.join(' | '));
+  if (pcapResults.length > 0) {
+    renderPcap(pcapResults);
+  } else {
+    document.getElementById('pcapEmpty').style.display = 'block';
+  }
+}
+
+function renderPcap(results) {
+  const totalBytes = results.reduce((s, r) => s + r.sizeBytes, 0);
+  if (results.length === 1) {
+    pcapText = results[0].text;
+    document.getElementById('pcapSize').textContent =
+      `${(totalBytes / 1024).toFixed(1)} KB captured`;
+  } else {
+    const sep = '='.repeat(60);
+    pcapText = results.map(r => {
+      const header = r.deviceName
+        ? `${sep}\n DEVICE: ${r.deviceName}  |  INTERFACE: ${r.interface}\n${sep}`
+        : `${sep}\n INTERFACE: ${r.interface}\n${sep}`;
+      return `${header}\n\n${r.text}`;
+    }).join('\n\n');
+    document.getElementById('pcapSize').textContent =
+      `${(totalBytes / 1024).toFixed(1)} KB captured across ${results.length} interfaces`;
+  }
+  document.getElementById('pcapText').textContent = pcapText;
+  const rawBtn = document.getElementById('downloadRawBtn');
+  rawBtn.style.display = results.some(r => r.downloadId) ? 'inline-flex' : 'none';
+  document.getElementById('pcapResults').style.display = 'block';
+
+  // Light up and enable the PCAP Viewer tab
+  const viewerBtn = document.getElementById('viewerTabBtn');
+  viewerBtn.disabled = false;
+  viewerBtn.classList.add('viewer-ready');
+}
+
+async function copyPcap() {
+  if (!pcapText) return;
+  const btn = document.getElementById('copyBtn');
+  try {
+    await navigator.clipboard.writeText(pcapText);
+    btn.classList.add('copied');
+    btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Copied!`;
+    document.getElementById('copiedBanner').classList.add('active');
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy to Clipboard`;
+    }, 3000);
+  } catch (e) {
+    // Fallback: select all text in pre
+    const el = document.getElementById('pcapText');
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  }
+}
+
+function downloadPcap() {
+  if (!pcapResults.length) return;
+  const ts = new Date().toISOString().slice(0,19).replace(/:/g,'-');
+  const sep = '='.repeat(60);
+  const content = pcapResults.length === 1
+    ? pcapResults[0].fullText
+    : pcapResults.map(r => {
+        const header = r.deviceName
+          ? `${sep}\n DEVICE: ${r.deviceName}  |  INTERFACE: ${r.interface}\n${sep}`
+          : `${sep}\n INTERFACE: ${r.interface}\n${sep}`;
+        return `${header}\n\n${r.fullText}`;
+      }).join('\n\n');
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pcap_${ts}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadRawPcap() {
+  const ts = new Date().toISOString().slice(0,19).replace(/[:.]/g,'-');
+  const eligible = pcapResults.filter(r => r.downloadId);
+  if (!eligible.length) return;
+
+  if (eligible.length === 1) {
+    const r = eligible[0];
+    const devPart = (r.deviceName || r.deviceIp || 'device').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `${devPart}_${r.interface}_${ts}.pcap`;
+    const a = document.createElement('a');
+    a.href = `/api/pcap/download/${r.downloadId}`;
+    a.download = filename;
+    a.click();
+    return;
+  }
+
+  // Multiple captures → zip
+  const files = eligible.map(r => {
+    const devPart = (r.deviceName || r.deviceIp || 'device').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return { download_id: r.downloadId, filename: `${devPart}_${r.interface}_${ts}.pcap` };
+  });
+  const zipName = `captures_${ts}.zip`;
+
+  const res = await fetch('/api/pcap/download/zip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files, zip_name: zipName }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    showError('pcapError', `Zip download failed: ${err.detail || res.status}`);
+    return;
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = zipName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('active');
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Delegated click for interface cards — toggle selection for capture
+document.getElementById('ifaceList').addEventListener('click', e => {
+  const card = e.target.closest('.iface-card');
+  if (card && !card.dataset.noCapture) selectInterfaceByKey(card.dataset.key);
+});
+
+// Credentials sync: copy API password → all SSH password fields
+function onCredsSync() {
+  const sync = document.getElementById('creds-sync').checked;
+  const apiPass = document.getElementById('creds-api-pass').value;
+  const udmPass = document.getElementById('creds-udm-pass');
+  const devPass = document.getElementById('creds-dev-pass');
+  if (sync) {
+    udmPass.value = apiPass;
+    devPass.value = apiPass;
+    udmPass.disabled = true;
+    devPass.disabled = true;
+  } else {
+    udmPass.disabled = false;
+    devPass.disabled = false;
+  }
+}
+
+// Live sync while typing API password
+document.getElementById('creds-api-pass').addEventListener('input', () => {
+  if (document.getElementById('creds-sync').checked) onCredsSync();
+});
+
+// Allow Enter in password fields to trigger actions
+document.getElementById('creds-api-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const tab = document.querySelector('.tab-btn.active')?.dataset?.tab;
+    if (tab === 'pcap') loadInterfaces(); else runAnalysis();
+  }
+});
+document.getElementById('creds-udm-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadInterfaces();
+});
+document.getElementById('creds-dev-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadInterfaces();
+});
+
+function toggleCredsBar() {
+  const bar = document.getElementById('credsBar');
+  const btn = document.getElementById('credsToggle');
+  const open = bar.classList.toggle('expanded');
+  btn.classList.toggle('open', open);
+  btn.querySelector('svg').style.transform = open ? 'rotate(180deg)' : '';
+}
+
+function _g(id) { return document.getElementById(id); }
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) return;
+    const c = await res.json();
+    if (c.host)                _g('creds-host').value         = c.host;
+    if (c.api_port)            _g('creds-api-port').value     = c.api_port;
+    if (c.api_site)            _g('creds-api-site').value     = c.api_site;
+    if (c.api_username)        _g('creds-api-user').value     = c.api_username;
+    if (c.api_password)        _g('creds-api-pass').value     = c.api_password;
+    if (c.api_key)             _g('creds-api-key').value      = c.api_key;
+    if (c.ssh_port)            _g('creds-ssh-port').value     = c.ssh_port;
+    if (c.udm_ssh_username)    _g('creds-udm-user').value     = c.udm_ssh_username;
+    if (c.udm_ssh_password)    _g('creds-udm-pass').value     = c.udm_ssh_password;
+    if (c.device_ssh_username) _g('creds-dev-user').value     = c.device_ssh_username;
+    if (c.device_ssh_password) _g('creds-dev-pass').value     = c.device_ssh_password;
+  } catch (_) {}
+}
+
+async function saveConfig() {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host:                 _g('creds-host').value.trim(),
+        api_port:             parseInt(_g('creds-api-port').value) || 443,
+        api_site:             _g('creds-api-site').value.trim() || 'default',
+        api_username:         _g('creds-api-user').value.trim(),
+        api_password:         _g('creds-api-pass').value,
+        api_key:              _g('creds-api-key').value,
+        ssh_port:             parseInt(_g('creds-ssh-port').value) || 22,
+        udm_ssh_username:     _g('creds-udm-user').value.trim(),
+        udm_ssh_password:     _g('creds-udm-pass').value,
+        device_ssh_username:  _g('creds-dev-user').value.trim(),
+        device_ssh_password:  _g('creds-dev-pass').value,
+      }),
+    });
+  } catch (_) {}
+}
+
+// Load saved credentials on startup
+loadConfig();
+
+// ---------------------------------------------------------------------------
+// Live Logs
+// ---------------------------------------------------------------------------
+let _logEventSource = null;
+let _logPaused = false;
+let _logTotalLines = 0;
+let _logDeviceIp = null;
+let _logDeviceType = null;
+
+function openLiveLogs() {
+  if (!_activeDeviceFilter) return;
+
+  const dev = allInterfaces.find(i => i.device_ip === _activeDeviceFilter);
+  const deviceName = dev ? dev.device_name : _activeDeviceFilter;
+  const isGateway = dev ? dev.device_type === 'gateway' : true;
+
+  const sshPort = parseInt(document.getElementById('creds-ssh-port').value) || 22;
+  const sshUser = isGateway
+    ? document.getElementById('creds-udm-user').value.trim()
+    : document.getElementById('creds-dev-user').value.trim();
+  const sshPass = isGateway
+    ? document.getElementById('creds-udm-pass').value
+    : document.getElementById('creds-dev-pass').value;
+
+  if (!sshUser) {
+    alert('SSH credentials missing — open the Credentials bar and fill in SSH username/password.');
+    return;
+  }
+
+  // Reset state
+  _logTotalLines = 0;
+  _logPaused = false;
+  _logDeviceIp = _activeDeviceFilter;
+  document.getElementById('logOutput').innerHTML = '';
+  document.getElementById('logFilter').value = '';
+  document.getElementById('logLineCount').textContent = '0 lines';
+  document.getElementById('logModalTitle').textContent = `tail -f /var/log/messages  —  ${deviceName} (${_activeDeviceFilter})`;
+  document.getElementById('logToggleBtn').textContent = 'Pause';
+  document.getElementById('logStatusDot').classList.remove('stopped');
+  document.getElementById('logModalBackdrop').classList.add('open');
+
+  _startLogStream(_activeDeviceFilter, sshUser, sshPass, sshPort);
+}
+
+function _startLogStream(host, sshUser, sshPass, sshPort) {
+  if (_logEventSource) { _logEventSource.close(); _logEventSource = null; }
+
+  const params = new URLSearchParams({
+    host,
+    ssh_username: sshUser,
+    ssh_password: sshPass,
+    ssh_port: sshPort,
+    log_path: '/var/log/messages',
+  });
+
+  const es = new EventSource(`/api/logs/stream?${params}`);
+  _logEventSource = es;
+
+  es.onmessage = e => {
+    if (_logPaused) return;
+    _appendLogLine(e.data);
+  };
+
+  es.onerror = () => {
+    _appendLogLine('\x00ERROR\x00 Connection lost or stream ended.');
+    document.getElementById('logStatusDot').classList.add('stopped');
+    es.close();
+    _logEventSource = null;
+  };
+}
+
+function _appendLogLine(text) {
+  if (text.startsWith('\x00ERROR\x00')) {
+    text = '⚠ ' + text.slice(8);
+  }
+
+  _logTotalLines++;
+  const out = document.getElementById('logOutput');
+  const div = document.createElement('div');
+  div.className = 'log-line';
+
+  // Colour coding
+  const lower = text.toLowerCase();
+  if (/\b(error|err|fail|crit|emerg|alert)\b/.test(lower)) div.classList.add('log-err');
+  else if (/\b(warn|warning)\b/.test(lower)) div.classList.add('log-warn');
+
+  div.textContent = text;
+  out.appendChild(div);
+
+  // Apply current filter immediately
+  _filterLine(div);
+
+  document.getElementById('logLineCount').textContent = `${_logTotalLines} lines`;
+
+  if (document.getElementById('logAutoScroll').checked) {
+    out.scrollTop = out.scrollHeight;
+  }
+}
+
+const _errPattern = /\b(error|err|fail|crit|emerg|alert)\b/i;
+
+function _filterLine(div) {
+  const raw = document.getElementById('logFilter').value;
+  const caseSensitive = document.getElementById('logCaseSensitive').checked;
+  const invert = document.getElementById('logInvert').checked;
+  const errorsOnly = document.getElementById('logErrorsOnly').checked;
+
+  // Errors-only gate: hide non-error lines immediately
+  if (errorsOnly && !_errPattern.test(div.textContent)) {
+    div.classList.add('hidden');
+    return;
+  }
+
+  if (!raw) {
+    div.classList.remove('hidden');
+    div.innerHTML = escHtml(div.textContent);
+    return;
+  }
+
+  let matches = false;
+  let highlighted = escHtml(div.textContent);
+
+  try {
+    const flags = caseSensitive ? 'g' : 'gi';
+    let pattern;
+    if (raw.startsWith('/') && raw.lastIndexOf('/') > 0) {
+      const lastSlash = raw.lastIndexOf('/');
+      pattern = new RegExp(raw.slice(1, lastSlash), flags);
+    } else {
+      pattern = new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+    }
+    matches = pattern.test(div.textContent);
+    if (matches) {
+      highlighted = escHtml(div.textContent).replace(
+        new RegExp(pattern.source, flags),
+        m => `<mark>${m}</mark>`
+      );
+    }
+  } catch {
+    matches = div.textContent.includes(raw);
+  }
+
+  const show = invert ? !matches : matches;
+  div.classList.toggle('hidden', !show);
+  if (show) div.innerHTML = highlighted;
+}
+
+function applyLogFilter() {
+  document.querySelectorAll('#logOutput .log-line').forEach(div => {
+    div.textContent = div.textContent; // reset innerHTML to plain text first
+    _filterLine(div);
+  });
+}
+
+function toggleLogStream() {
+  const btn = document.getElementById('logToggleBtn');
+  const dot = document.getElementById('logStatusDot');
+  _logPaused = !_logPaused;
+  btn.textContent = _logPaused ? 'Resume' : 'Pause';
+  dot.classList.toggle('stopped', _logPaused);
+}
+
+function clearLogOutput() {
+  document.getElementById('logOutput').innerHTML = '';
+  _logTotalLines = 0;
+  document.getElementById('logLineCount').textContent = '0 lines';
+}
+
+function closeLiveLogs() {
+  if (_logEventSource) { _logEventSource.close(); _logEventSource = null; }
+  document.getElementById('logModalBackdrop').classList.remove('open');
+  document.getElementById('logStatusDot').classList.add('stopped');
+}
+
+function onBackdropClick(e) {
+  if (e.target === document.getElementById('logModalBackdrop')) closeLiveLogs();
+}
+
+</script>
+</body>
+</html>

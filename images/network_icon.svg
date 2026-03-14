@@ -1,0 +1,57 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background that fills entire space -->
+  <rect width="512" height="512" fill="#007acc"/>
+
+  <!-- Network connection lines (drawn first, behind devices) -->
+  <line x1="128" y1="128" x2="256" y2="256" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+  <line x1="384" y1="128" x2="256" y2="256" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+  <line x1="128" y1="384" x2="256" y2="256" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+  <line x1="384" y1="384" x2="256" y2="256" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+  <line x1="128" y1="128" x2="384" y2="128" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <line x1="384" y1="128" x2="384" y2="384" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <line x1="384" y1="384" x2="128" y2="384" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <line x1="128" y1="384" x2="128" y2="128" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Network devices (computers/routers) -->
+  <rect x="104" y="104" width="48" height="48" fill="#ffffff" stroke="#e0e0e0" stroke-width="2" rx="4"/>
+  <rect x="360" y="104" width="48" height="48" fill="#ffffff" stroke="#e0e0e0" stroke-width="2" rx="4"/>
+  <rect x="104" y="360" width="48" height="48" fill="#ffffff" stroke="#e0e0e0" stroke-width="2" rx="4"/>
+  <rect x="360" y="360" width="48" height="48" fill="#ffffff" stroke="#e0e0e0" stroke-width="2" rx="4"/>
+
+  <!-- Device screens -->
+  <rect x="112" y="112" width="32" height="32" fill="#333333" rx="2"/>
+  <rect x="368" y="112" width="32" height="32" fill="#333333" rx="2"/>
+  <rect x="112" y="368" width="32" height="32" fill="#333333" rx="2"/>
+  <rect x="368" y="368" width="32" height="32" fill="#333333" rx="2"/>
+
+  <!-- Status lights on devices -->
+  <circle cx="136" cy="116" r="3" fill="#00ff00"/>
+  <circle cx="392" cy="116" r="3" fill="#00ff00"/>
+  <circle cx="136" cy="372" r="3" fill="#00ff00"/>
+  <circle cx="392" cy="372" r="3" fill="#00ff00"/>
+
+  <!-- Central router -->
+  <rect x="232" y="232" width="48" height="48" fill="#ffffff" stroke="#e0e0e0" stroke-width="3" rx="6"/>
+  <rect x="240" y="240" width="32" height="32" fill="#333333" rx="3"/>
+
+  <!-- Router antenna -->
+  <line x1="256" y1="232" x2="256" y2="208" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="256" cy="232" r="6" fill="#ffffff"/>
+
+  <!-- WiFi waves around central router -->
+  <path d="M 232 200 Q 256 180 280 200" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 224 188 Q 256 168 288 188" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M 216 176 Q 256 156 296 176" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Data flow arrow -->
+  <polygon points="256,192 248,176 264,176" fill="#ffffff"/>
+
+  <!-- Cloud symbol in corner -->
+  <ellipse cx="80" cy="80" rx="30" ry="20" fill="#ffffff" opacity="0.7"/>
+  <ellipse cx="95" cy="70" rx="25" ry="15" fill="#ffffff" opacity="0.7"/>
+  <ellipse cx="110" cy="80" rx="30" ry="20" fill="#ffffff" opacity="0.7"/>
+</svg>
+  <line x1="64" y1="246" x2="32" y2="246" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  <line x1="64" y1="270" x2="32" y2="300" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  <line x1="64" y1="294" x2="32" y2="294" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+</svg>

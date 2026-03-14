@@ -161,6 +161,14 @@
     gap: 4px;
     padding-bottom: 2px;
   }
+  .creds-save-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    padding-bottom: 2px;
+  }
   .creds-sync-label {
     display: flex;
     align-items: center;
@@ -1147,6 +1155,12 @@
         <input type="checkbox" id="creds-sync" onchange="onCredsSync()">
         Copy API pass
       </label>
+    </div>
+    <div class="creds-save-wrap">
+      <button class="btn btn-primary btn-sm" onclick="saveConfig()" title="Save credentials to disk">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+        Save
+      </button>
     </div>
   </div>
 </div>
@@ -2591,17 +2605,16 @@ function renderExportTable() {
     }, sortCol, sortDir);
 
   } else if (sec === 'ports') {
-    const cols = ['device', 'port', 'name', 'profile', 'enabled', 'up', 'speed', 'duplex', 'media', 'poe'];
-    const _fixMedia = v => (typeof v === 'string' ? v.replace(/2P5GE/gi, '2.5GE') : v);
-    html = _buildTable(cols, rawRows, (c, v) => {
-      const fv = _fixMedia(v);
-      if (c === 'up') {
-        const isUp = fv === true || fv === 'true';
+    const cols = _getSectionConfig(sec, rawRows).cols;
+    html = _buildTable(cols, rawRows, (c, v, r) => {
+      const fv = _fixMedia(c === 'status' ? r.up : v);
+      const isUp = r.up === true || r.up === 'true';
+      if (c === 'status') {
         return `<td><span class="badge ${isUp ? 'badge-yes' : 'badge-no'}">${isUp ? 'Up' : 'Down'}</span></td>`;
       }
       if (c === 'enabled') return `<td>${_badge(fv)}</td>`;
       if (c === 'device') return `<td><strong>${_cell(fv)}</strong></td>`;
-      if (c === 'speed' && fv != null) return `<td style="font-family:var(--mono)">${_cell(fv)}</td>`;
+      if (c === 'speed') return `<td style="font-family:var(--mono)">${isUp && fv != null ? _cell(_normalizeSpeed(fv)) : '0MB'}</td>`;
       if (c === 'poe' && (fv == null || fv === '')) return `<td>off</td>`;
       if (c === 'profile' && (fv == null || fv === '')) return `<td>No Profile</td>`;
       return `<td>${_cell(fv)}</td>`;
@@ -2643,6 +2656,20 @@ function downloadExport(type) {
   const a = document.createElement('a');
   a.href = `/api/export-config/download/${_exportJobId}/${type}`;
   a.click();
+}
+
+function _fixMedia(v) {
+  return typeof v === 'string' ? v.replace(/2P5GE/gi, '2.5GE') : v;
+}
+
+function _normalizeSpeed(v) {
+  const n = parseInt(v, 10);
+  if (isNaN(n) || v == null) return v;
+  if (n >= 10000) return '10GB';
+  if (n >= 1000) return '1GB';
+  if (n >= 100) return '100MB';
+  if (n >= 10) return '10MB';
+  return `${n}MB`;
 }
 
 function _getSectionConfig(sec, rawRows) {
@@ -2697,6 +2724,18 @@ function _getSectionConfig(sec, rawRows) {
       return { cols: rawRows.length ? ['name', ...Object.keys(rawRows[0]).filter(k => k !== 'name')] : ['name'],
                transform: (c, v) => boolCols.has(c) ? bool(v) : str(v) };
     }
+    case 'ports':
+      return { cols: ['device', 'port', 'name', 'profile', 'enabled', 'status', 'speed', 'duplex', 'media', 'poe'],
+               transform: (c, v, r) => {
+                 const isUp = r && (r.up === true || r.up === 'true');
+                 const fv   = _fixMedia(c === 'status' ? (r && r.up) : v);
+                 if (c === 'status')  return isUp ? 'Up' : 'Down';
+                 if (c === 'enabled') return bool(fv);
+                 if (c === 'speed')   return isUp && fv != null ? _normalizeSpeed(fv) : '0MB';
+                 if (c === 'poe'     && (fv == null || fv === '')) return 'off';
+                 if (c === 'profile' && (fv == null || fv === '')) return 'No Profile';
+                 return fv == null ? '' : String(fv);
+               }};
     case 'routing': {
       const priority = ['name', 'type', 'enabled', 'gateway_type', 'static_route_network', 'static_route_next_hop', 'static_route_distance'];
       return { cols: [...priority.filter(k => allKeys.includes(k)), ...allKeys.filter(k => !priority.includes(k))],
@@ -2721,26 +2760,13 @@ function _humanUptime(v) {
 
 function exportTableCSV() {
   const esc = v => { const s = v == null ? '' : String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s; };
-  let cols, mappedRows;
-  if (_exportSection === 'ports') {
-    const rawRows = _livePortsData || [];
-    if (!rawRows.length) { alert('No data to export.'); return; }
-    cols = ['device', 'port', 'name', 'profile', 'enabled', 'up', 'speed', 'duplex', 'media', 'poe'];
-    mappedRows = rawRows.map(r => cols.map(c => {
-      let v = r[c] ?? null;
-      if (v == null || v === '') return c === 'poe' ? 'off' : c === 'profile' ? 'No Profile' : '';
-      if (c === 'enabled' || c === 'up') return v === true || v === 'true' ? 'Yes' : 'No';
-      return typeof v === 'string' ? v.replace(/2P5GE/gi, '2.5GE') : String(v);
-    }));
-  } else {
-    if (!_exportData || !_exportSite) return;
-    const rawRows = _defaultSort(_exportSection, (_exportData.sites[_exportSite] || {})[_exportSection] || []);
-    if (!rawRows.length) { alert('No data to export.'); return; }
-    const cfg = _getSectionConfig(_exportSection, rawRows);
-    cols = cfg.cols;
-    mappedRows = rawRows.map(r => cols.map(c => cfg.transform(c, r[c])));
-  }
-  const csv = [cols.map(c => c.toUpperCase()).join(','), ...mappedRows.map(r => r.map(esc).join(','))].join('\r\n');
+  const rawRows = _exportSection === 'ports'
+    ? (_livePortsData || [])
+    : _defaultSort(_exportSection, (_exportData && _exportSite ? ((_exportData.sites[_exportSite] || {})[_exportSection] || []) : []));
+  if (!rawRows.length) { alert('No data to export.'); return; }
+  if (_exportSection !== 'ports' && (!_exportData || !_exportSite)) return;
+  const cfg = _getSectionConfig(_exportSection, rawRows);
+  const csv = [cfg.cols.map(c => c.toUpperCase()).join(','), ...rawRows.map(r => cfg.cols.map(c => esc(cfg.transform(c, r[c], r))).join(','))].join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
   a.download = `unifi_${_exportSection}_${_exportSite || 'export'}.csv`;
@@ -2766,37 +2792,19 @@ function exportAllToExcel() {
     { key: 'devices',        name: 'Devices' },
     { key: 'clients',        name: 'Clients' },
   ];
-  const portCols = ['device', 'port', 'name', 'profile', 'enabled', 'up', 'speed', 'duplex', 'media', 'poe'];
   const wb = XLSX.utils.book_new();
   for (const sec of sections) {
-    let rows = sec.key === 'ports' ? (_livePortsData || []) : _defaultSort(sec.key, site[sec.key] || []);
+    const rows = sec.key === 'ports' ? (_livePortsData || []) : _defaultSort(sec.key, site[sec.key] || []);
     let ws;
     if (rows && rows.length) {
-      if (sec.key === 'ports') {
-        const mapped = rows.map(r => {
-          const out = {};
-          for (const c of portCols) {
-            let v = r[c] ?? null;
-            if (v == null || v === '') {
-              v = c === 'poe' ? 'off' : c === 'profile' ? 'No Profile' : '';
-            } else if (typeof v === 'string') {
-              v = v.replace(/2P5GE/gi, '2.5GE');
-            }
-            out[c.toUpperCase()] = v;
-          }
-          return out;
-        });
-        ws = XLSX.utils.json_to_sheet(mapped, { header: portCols.map(c => c.toUpperCase()) });
-      } else {
-        const cfg = _getSectionConfig(sec.key, rows);
-        const header = cfg.cols.map(c => c.toUpperCase());
-        const mapped = rows.map(r => {
-          const out = {};
-          for (const c of cfg.cols) out[c.toUpperCase()] = cfg.transform(c, r[c]);
-          return out;
-        });
-        ws = XLSX.utils.json_to_sheet(mapped, { header });
-      }
+      const cfg = _getSectionConfig(sec.key, rows);
+      const header = cfg.cols.map(c => c.toUpperCase());
+      const mapped = rows.map(r => {
+        const out = {};
+        for (const c of cfg.cols) out[c.toUpperCase()] = cfg.transform(c, r[c], r);
+        return out;
+      });
+      ws = XLSX.utils.json_to_sheet(mapped, { header });
     } else {
       ws = XLSX.utils.aoa_to_sheet([['No data available']]);
     }
