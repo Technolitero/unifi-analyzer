@@ -35,7 +35,7 @@ install.bat     # Install and start as a Windows service
 uninstall.bat   # Remove the service
 ```
 
-The service starts automatically at boot and runs at `http://localhost:8080`. Logs are at `C:\Program Files\UnifiAnalyzer\logs\`.
+The installer prompts for an HTTP port (default `8080`, must be 1–65535). The service starts automatically at boot. Logs are at `C:\Program Files\UnifiAnalyzer\logs\`.
 
 ### From Source (any OS)
 
@@ -106,7 +106,7 @@ Suggestions are filterable by severity and searchable by keyword.
 
 ### Config Lookup Tab
 
-Click **Load Config** to fetch live configuration data from the controller. Data is displayed in 12 section tabs and can be exported to CSV or Excel.
+Click **Load Config** to fetch live configuration data from the controller. Data is displayed in 12 section tabs and can be exported to Excel.
 
 #### Sections
 
@@ -149,45 +149,56 @@ Click **Load Config** to fetch live configuration data from the controller. Data
 
 #### Exports
 
-**Export CSV** — exports the current section as a `.csv` file:
-- Filename: `unifi_<section>_<site>.csv`
-- Header row in ALL CAPS
-- Same column order and value transformations as the table
+**Export Excel** — exports the current section as a single-sheet `.xlsx` file:
+- Filename: `{UDM name}-{datetime}-{section}.xlsx`
+- Header row: orange background, white bold text, ALL CAPS
+- Column widths auto-fitted to the longest value
 
 **Export All to Excel** — exports all 12 sections as a single `.xlsx` workbook:
-- Filename: `unifi_config_<site>.xlsx`
+- Filename: `{UDM name}-{datetime}-config.xlsx`
 - One worksheet per section, named by section
 - Header row: orange background, white bold text, ALL CAPS
-- Column widths auto-fitted to the longest value (header always considered)
+- Column widths auto-fitted to the longest value
 - Same transformations as the table display
+
+**Save to History** — saves the full 12-section Excel workbook to the `history/` directory on the server. The button grays out after saving and re-activates when a new config is loaded. Saved exports are accessible from the **History tab**.
 
 ---
 
 ### Interfaces Tab
 
-Click **Load Interfaces** to SSH into the UDM and all managed switches and APs, enumerate every network interface, and display them in a card grid.
+Click **Load Interfaces** to SSH into the UDM and all managed switches and APs, enumerate every network interface, and display them in a sortable table.
 
 **Per-interface data:**
 
 | Field | Description |
 |---|---|
-| Name | Interface name (`eth0`, `br10`, `vlan20`, etc.) |
+| Device | Device name hosting the interface |
+| Interface | Interface name (`eth0`, `br10`, `vlan20`, etc.) |
 | Type | ethernet, bridge, vlan, wireless, bond, tunnel |
 | State | Link up / no link, with color indicator |
 | IP Addresses | IPv4 and IPv6 assignments |
+| VLAN | VLAN ID (parsed from name or bridge membership) |
+| Network | Mapped from UniFi API if a matching VLAN exists |
 | MAC | Hardware address |
 | MTU | Maximum transmission unit |
-| VLAN | VLAN ID (parsed from name or bridge membership) |
-| Network Name | Mapped from UniFi API if a matching VLAN exists |
+| Speed | Link speed in Mbps |
 | RX / TX | Byte counters from `/proc/net/dev` |
-| Link Speed | Mbps from `/sys/class/net` |
+
+**Interface highlighting:**
+- Interfaces available for packet capture are highlighted in blue and are selectable
+- Non-capturable interfaces are displayed but cannot be selected
+- Down interfaces are dimmed and non-selectable
+
+**Connected devices** (shown inline per interface):
+- Displays connected client hostnames (with IP) in an expandable dropdown
+- Shows count of connected clients; click to expand the full list
+- Uplinked switches and APs are discovered via reverse uplink lookup
 
 **Filtering:**
 - Search by interface name, IP, or VLAN
 - Toggle to show or hide down interfaces
-- Device filter chips appear at the top — click a device name to show only its interfaces
-
-Interfaces can be selected for packet capture. The device filter bar is only visible on the Interfaces tab.
+- Device filter chips at the top — click a device name to show only its interfaces
 
 ---
 
@@ -239,6 +250,45 @@ Activated after a capture completes. Displays parsed packet data with:
 - Search and filter by IP, port, or protocol
 - Timeline / chronological view
 - Export filtered subsets as text or download
+
+---
+
+### History Tab
+
+Stores and manages saved configuration exports from the **Config Lookup** tab.
+
+#### Saving
+
+Click **Save to History** in the Config Lookup export toolbar to save the current full 12-section Excel workbook to the `history/` directory on the server. The button grays out after saving and re-activates when a new config is loaded via **Load Config**.
+
+#### History Table
+
+| Column | Description |
+|---|---|
+| Filename | Export file name including UDM name and timestamp |
+| Saved At | Date and time the export was saved |
+| Size | File size (KB / MB) |
+| Actions | Per-row Download and Delete buttons |
+
+#### Bulk Actions
+
+Select one or more exports using the checkboxes (or **Select All**) to enable:
+
+| Button | Behavior |
+|---|---|
+| **Compare Selected** | Compares all selected files against the most recent export and downloads a color-coded Excel diff report |
+| **Download Selected** | Downloads a single `.xlsx` if one file is selected; downloads a `.zip` archive if multiple files are selected |
+| **Delete Selected** | Permanently deletes all selected exports (with confirmation prompt) |
+
+#### Compare Report Format
+
+The comparison report is an Excel workbook downloaded as `comparison-{timestamp}.xlsx`:
+
+- **Summary sheet** — pivoted view with sections as rows and each compared file as a column; cells show `"3 added, 2 removed"` or `"No changes"`
+- **One diff sheet per section** that has any differences — contains all differing rows plus one `"vs {filename}"` status column per compared file
+  - 🟢 Green row — record exists in the latest export but not in that older file (added)
+  - 🔴 Red row — record existed in the older file but is absent from the latest (removed)
+  - 🟡 Yellow row — record status is mixed across compared files
 
 ---
 
@@ -294,7 +344,7 @@ Available from the Interfaces tab after interfaces are loaded. Streams system lo
 - Passwords are decrypted in memory only during active use
 - The backend connects to the controller with `verify=False` — run on a trusted local network only
 - SSH host keys are auto-accepted (appropriate for a trusted LAN)
-- Do not expose port 8080 to the internet
+- Do not expose the application port to the internet
 
 ---
 
@@ -316,6 +366,7 @@ unifi-analyzer/
 ├── UniFi Analyzer.spec  # PyInstaller build spec
 ├── rebuild_mac_app.sh   # macOS app rebuild script
 ├── fix_mac_app.sh       # macOS app fix script
+├── history/             # Saved configuration exports (created at runtime)
 ├── images/              # Application icons (ICNS, PNG, SVG)
 ├── foundry/             # Build artifacts (build/, dist/)
 └── static/
@@ -328,10 +379,11 @@ unifi-analyzer/
 |---|---|
 | `fastapi` | Web framework and API routing |
 | `uvicorn` | ASGI server |
+| `python-multipart` | Multipart form upload handling (required for Save to History) |
 | `requests` | HTTP client for UniFi API calls |
 | `urllib3` | Connection pooling and SSL handling |
 | `paramiko` | SSH client for PCAP capture and interface discovery |
 | `pydantic` | Request/response data validation |
 | `cryptography` | AES credential encryption |
-| `pandas` | Data manipulation for export |
-| `openpyxl` | Excel (.xlsx) file generation |
+| `pandas` | Data manipulation for config comparison |
+| `openpyxl` | Excel (.xlsx) file generation and diff reports |
