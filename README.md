@@ -1,144 +1,226 @@
-# UniFi UDM Analyzer
+# UniFi Analyzer
 
-A comprehensive local web application that connects to a UniFi Dream Machine (UDM / UDM-Pro / UDM-SE) to provide deep network analysis, configuration insights, packet capture, and device management capabilities.
+A comprehensive local web application that connects to a UniFi Dream Machine (UDM / UDM-Pro / UDM-SE / UDR) to provide deep network analysis, configuration insights, live interface discovery, packet capture, and structured data export.
 
 ---
 
 ## Requirements
 
-- **Python 3.11+** (3.8+ for Windows service installation)
-- **Windows 10/11** (for service installation) or **macOS/Linux** (for source installation)
-- A UniFi Dream Machine (UDM, UDM-Pro, UDM-SE, or UDR) running UniFi OS
-- SSH access enabled on the UDM (for PCAP capture)
+- **Python 3.8+** (3.11+ recommended)
+- **Windows 10/11**, **macOS**, or **Linux**
+- A UniFi Dream Machine or compatible controller running UniFi OS
+- SSH access enabled on the controller (required for PCAP capture and interface discovery)
 
 ---
 
-## Installation
+## Installation & Running
 
-### Python Installation
+### Windows (Recommended)
 
-1. **Set up a virtual environment** (recommended):
-   ```bash
-   cd unifi-analyzer
-   python3 -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
+Double-click **`UnifiAnalyzer.bat`**. It will:
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Detect Python 3.8+ (falls back through `py`, `python3`, `python`)
+2. Create a virtual environment at `.venv/` (reuses if it already exists)
+3. Install / upgrade all dependencies from `requirements.txt`
+4. Start the server at `http://127.0.0.1:8080` and open a browser tab automatically
 
-### Windows Service Installation
+Press **Ctrl+C** to stop the server.
 
-For Windows users, you can install the UniFi Analyzer as a Windows service that starts automatically with the system:
+### Windows Service
 
-1. **Run the installer as Administrator**:
-   ```cmd
-   install.bat
-   ```
+Run as Administrator:
 
-   This will:
-   - Install the application to `C:\Program Files\UnifiAnalyzer`
-   - Create a virtual environment and install all dependencies
-   - Register the application as a Windows service
-   - Start the service automatically
+```cmd
+install.bat     # Install and start as a Windows service
+uninstall.bat   # Remove the service
+```
 
-2. **Access the application** at `http://localhost:8080`
+The service starts automatically at boot and runs at `http://localhost:8080`. Logs are at `C:\Program Files\UnifiAnalyzer\logs\`.
 
-3. **Uninstall** (also requires Administrator):
-   ```cmd
-   uninstall.bat
-   ```
+### From Source (any OS)
 
-   > **Note**: The installer requires Python 3.8+ and internet access to download NSSM (service manager). Service logs are available at `C:\Program Files\UnifiAnalyzer\logs\`.
+```bash
+cd unifi-analyzer
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --host 127.0.0.1 --port 8080
+```
 
-### Mac App Installation
+Open `http://localhost:8080`.
 
-A macOS app bundle has been created for easy installation.
+### macOS App
 
-1. Locate the `UniFi Analyzer.app` file in the `foundry/dist/` directory.
-2. Copy `UniFi Analyzer.app` to your `/Applications/` folder.
-3. Double-click `UniFi Analyzer.app` to launch the application. It will start the web server and open your browser to `http://localhost:8080`.
+Copy `UniFi Analyzer.app` from `foundry/dist/` to `/Applications/` and double-click. A status window appears in the dock; closing it stops the server.
 
-   The app features a custom network connections map icon showing interconnected devices, routers, and data flows - designed to fill the entire icon space for maximum visibility in the macOS dock and toolbar.
-
-   **Note**: The Mac app now opens a status window that stays visible in your dock. You can use this window to monitor the server status and quit the application when you're done. Closing this window will stop the server.
-
-> **To rebuild the Mac app with the latest changes:**
-> ```bash
-> ./rebuild_mac_app.sh
-> ```
-
-> **Known Issue**: If the app opens multiple browser tabs and doesn't connect, this is due to a development reload mode being enabled in the packaged app.
->
-> **Quick Fix**: Run the fix script:
-> ```bash
-> chmod +x fix_mac_app.sh
-> ./fix_mac_app.sh
-> ```
-> Then follow the on-screen instructions to replace the broken executable with the fixed one.
->
-> **Alternative**: Use the Python source installation method above, which doesn't have this issue.
+> To rebuild the macOS app after code changes: `./rebuild_mac_app.sh`
 
 ---
 
-## Running
+## Credentials
 
-### As a Windows Service
+The credential bar at the top of every page stores:
 
-If installed as a Windows service (see Installation above), the application starts automatically with Windows and runs at `http://localhost:8080`.
+| Field | Description |
+|---|---|
+| Host | UDM IP or hostname |
+| Port | API port (default `443`) |
+| Site | Site name (default `default`) |
+| Username / Password | UniFi admin credentials |
+| SSH Port | SSH port (default `22`) |
+| UDM SSH Password | Root password for gateway SSH |
+| Device SSH Password | Admin password for switch/AP SSH |
 
-### From Source
-
-1. **Activate the virtual environment** (if not already active):
-   ```bash
-   cd unifi-analyzer
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-2. **Start the web server**:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8080 --reload
-   ```
-
-3. **Open your browser** to **http://localhost:8080**.
-
-### From Mac App
-
-Double-click `UniFi Analyzer.app` in `/Applications/`.
+Credentials are **auto-saved** whenever you click **Analyze**, **Load Config**, or **Load Interfaces**, and are reloaded automatically on next launch. All passwords are encrypted at rest using AES-128-CBC (Fernet) stored in `~/.unifi-analyzer/config.json`.
 
 ---
 
 ## Features
 
-### 🔍 Configuration Analysis
+### Analyze Tab
 
-Enter your UDM's IP, port (default 443), site name (default `default`), and your UniFi admin credentials. The analyzer performs comprehensive checks across multiple categories:
+Click **Analyze Configuration** to connect to the controller and run a full inspection. Results are grouped by category with color-coded severity badges.
 
-| Category | Checks |
+**Severity levels:** 🔴 Critical → 🟠 High → 🟡 Medium → 🔵 Low → ℹ️ Info
+
+| Category | What is checked |
 |---|---|
-| **WiFi** | WPA3/WPA2 encryption, TKIP/AES modes, PMF (802.11w), 802.11r fast roaming, DTIM periods, hidden SSIDs, minimum RSSI thresholds, band steering |
-| **Devices** | Firmware updates, device connectivity status, channel utilization (>70% warnings), TX power settings, adoption state |
-| **Networks** | Guest VLAN presence, IoT VLAN segregation, DHCP lease times, MTU settings, IPv6 configuration, VLAN segmentation |
-| **Firewall** | Allow-all rules detection, disabled rules cleanup, logging configuration, port forwarding security review |
-| **Security** | IDS/IPS mode (detection vs prevention), threat management status |
-| **DNS** | Public resolver usage (8.8.8.8, 1.1.1.1), split-DNS recommendations |
-| **Performance** | Smart Queues/SQM (bufferbloat prevention), hardware offloading status |
+| **Wi-Fi** | WPA3/WPA2 encryption, TKIP detection, PMF (802.11w), 802.11r fast roaming, DTIM period, minimum RSSI thresholds, band steering, hidden SSIDs, channel utilization per radio (>50% warning, >70% critical) |
+| **Devices** | Firmware update availability, offline/unadopted devices, TX power (HIGH = interference risk), channel utilization per AP radio |
+| **Networks** | Guest VLAN presence, IoT VLAN segregation, DHCP lease time (<3600s), MTU (<1500), IPv6 enablement, VLAN segmentation count |
+| **Firewall** | Allow-all rules (no source/destination), disabled orphan rules, logging gaps (>5 accept rules without logging), port forwarding exposure, zone-based policy analysis |
+| **Security** | IDS/IPS mode (detection-only vs. prevention), threat management status |
+| **DNS** | Public resolver usage (8.8.8.8, 1.1.1.1) — recommends split-DNS or NextDNS |
+| **Performance** | Smart Queues / SQM (bufferbloat prevention), hardware offloading |
 
-Suggestions are color-coded by severity: **🔴 Critical → 🟠 High → 🟡 Medium → 🔵 Low → ℹ️ Info**.
+**Summary tables shown after analysis:**
 
-### 📡 PCAP Capture & Analysis
+- **Devices** — Name, IP, MAC, Type, Model, Firmware, Status, Mesh (APs with meshing enabled are flagged with a warning badge)
+- **Clients** — Hostname, IP, MAC, Wired/Wireless, Network, Signal, RX/TX
+- **Networks** — Name, Purpose, Subnet, VLAN, Enabled
+- **WLANs** — SSID, Security, Band, VLAN, Hidden, Enabled
 
-SSH into your UDM (default user: `root`) to run `tcpdump` captures with advanced filtering and AI-ready formatting:
+Suggestions are filterable by severity and searchable by keyword.
 
-- **Packet Parsing**: Ethernet, IPv4/IPv6, TCP/UDP/ICMP, ARP, DNS, DHCP
-- **Traffic Analysis**: Protocol distribution, top talkers, conversation flows
-- **AI Integration**: Formatted output ready to paste into Claude, ChatGPT, or any AI assistant
-- **Download Options**: Raw PCAP files or formatted text reports
-- **Batch Operations**: Capture multiple interfaces simultaneously and download as ZIP
+---
+
+### Config Lookup Tab
+
+Click **Load Config** to fetch live configuration data from the controller. Data is displayed in 12 section tabs and can be exported to CSV or Excel.
+
+#### Sections
+
+| Section | Columns |
+|---|---|
+| **Networks** | Name, Purpose, IP Subnet, Enabled |
+| **Wi-Fi** | Name, Security, Band, VLAN ID, Hide SSID, Enabled |
+| **Firewall Zones** | Name, Networks |
+| **Firewall Policies** | Name, Action, Enabled, Protocol, Logging, Src Zone, Dst Zone, Src/Dst Address, Src/Dst Port, Description, Policy ID |
+| **Policy Groups** | Name, Type, Count, Members |
+| **DNS Records** | Domain, Type, Value, TTL, Enabled, Priority, Weight, Port |
+| **Routing** | Name, Type, Enabled, Gateway Type, Network, Next Hop, Distance |
+| **Port Forwards** | Name, Enabled, Protocol, Dst Port, Forward, Forward Port, Source, Interface, Destination IP, Logging |
+| **Port Profiles** | Name + all profile flag columns |
+| **Ports** | Device, Port, Name, Profile, Enabled, Status, Speed, Duplex, Media, POE |
+| **Devices** | Name, Model, IP, MAC, Type, State, Uptime |
+| **Clients** | Hostname, IP, MAC, Network, OUI, Connection, Uptime |
+
+#### Data Normalizations (applied in tables and exports)
+
+- **Uptime** — Raw seconds → human-readable (`45 sec`, `12 min`, `1h 48m`, `3d 2h`)
+- **Port Speed** — Raw Mbps → `10MB`, `100MB`, `1GB`, `10GB`; `0MB` when port is down
+- **Port Status** — Boolean `up` → `Up` / `Down`
+- **Media** — `2P5GE` → `2.5GE`
+- **POE** — null/empty → `off`
+- **Profile** — null/empty → `No Profile`
+- **Enabled** — Boolean → `Yes` / `No`
+- **Device State** — `1` → `Online`, `0` → `Offline`
+- **Wired** — Boolean → `Wired` / `Wireless`
+- **Hide SSID** — Boolean → `Hidden` / `Visible`
+
+#### Sorting
+
+- All columns are sortable by clicking the header (ascending / descending toggle)
+- **IP addresses** sort numerically by octet (not lexicographically)
+- **MAC addresses** sort by hex value
+- **Names with numbers** sort naturally (`Switch 2` before `Switch 10`)
+- **Devices** — UDM/gateway always first, then alphabetically by name
+- **Ports** — UDM/gateway ports first, then by device name, then by port number
+
+#### Exports
+
+**Export CSV** — exports the current section as a `.csv` file:
+- Filename: `unifi_<section>_<site>.csv`
+- Header row in ALL CAPS
+- Same column order and value transformations as the table
+
+**Export All to Excel** — exports all 12 sections as a single `.xlsx` workbook:
+- Filename: `unifi_config_<site>.xlsx`
+- One worksheet per section, named by section
+- Header row: orange background, white bold text, ALL CAPS
+- Column widths auto-fitted to the longest value (header always considered)
+- Same transformations as the table display
+
+---
+
+### Interfaces Tab
+
+Click **Load Interfaces** to SSH into the UDM and all managed switches and APs, enumerate every network interface, and display them in a card grid.
+
+**Per-interface data:**
+
+| Field | Description |
+|---|---|
+| Name | Interface name (`eth0`, `br10`, `vlan20`, etc.) |
+| Type | ethernet, bridge, vlan, wireless, bond, tunnel |
+| State | Link up / no link, with color indicator |
+| IP Addresses | IPv4 and IPv6 assignments |
+| MAC | Hardware address |
+| MTU | Maximum transmission unit |
+| VLAN | VLAN ID (parsed from name or bridge membership) |
+| Network Name | Mapped from UniFi API if a matching VLAN exists |
+| RX / TX | Byte counters from `/proc/net/dev` |
+| Link Speed | Mbps from `/sys/class/net` |
+
+**Filtering:**
+- Search by interface name, IP, or VLAN
+- Toggle to show or hide down interfaces
+- Device filter chips appear at the top — click a device name to show only its interfaces
+
+Interfaces can be selected for packet capture. The device filter bar is only visible on the Interfaces tab.
+
+---
+
+### PCAP Capture
+
+With interfaces selected on the Interfaces tab, configure and run a capture:
+
+| Option | Description |
+|---|---|
+| Duration | Seconds to capture (default 30) |
+| Packet Count | Optional hard limit |
+| BPF Filter | Berkeley Packet Filter expression |
+| Description | Label for the capture |
+| Max Display Packets | How many packets to show in browser (default 1000) |
+
+**BPF filter examples:**
+
+```
+host 192.168.1.50          # Traffic to/from one device
+tcp port 443               # HTTPS only
+not arp and not icmp       # Exclude noise
+src net 192.168.10.0/24    # IoT VLAN outbound
+```
+
+**Output options:**
+- Preview parsed packets in the PCAP Viewer tab
+- Copy AI-formatted text to clipboard (ready for Claude / ChatGPT)
+- Download raw `.pcap` file
+- Download formatted text report
+- Batch capture multiple interfaces → download as `.zip`
 
 **Common UDM interfaces:**
+
 | Interface | Description |
 |---|---|
 | `eth4` | WAN port (UDM-Pro) |
@@ -147,86 +229,72 @@ SSH into your UDM (default user: `root`) to run `tcpdump` captures with advanced
 | `wlan0` | 2.4 GHz radio |
 | `wlan1` | 5 GHz radio |
 
-**BPF filter examples:**
-- `host 192.168.1.50` — traffic to/from one device
-- `tcp port 443` — HTTPS only
-- `not arp and not icmp` — exclude ARP/ICMP noise
-- `src net 192.168.10.0/24` — traffic from IoT VLAN
+---
 
-### 🔧 Config Lookup
+### PCAP Viewer Tab
 
-Comprehensive configuration export and lookup tool that fetches all UniFi controller data:
+Activated after a capture completes. Displays parsed packet data with:
 
-- **Complete Export**: Networks, WLANs, devices, clients, firewall rules, port forwards, routing, DNS records
-- **Firewall Analysis**: Zone-based rules, policies, groups, and legacy rules
-- **Device Inventory**: APs, switches, gateways with firmware and connectivity status
-- **Client Details**: Connected devices with IP, MAC, network assignment, and connection type
-- **Policy Groups**: Firewall group definitions and member management
+- Protocol dissection (Ethernet, IPv4/IPv6, TCP/UDP/ICMP, ARP, DNS, DHCP)
+- Search and filter by IP, port, or protocol
+- Timeline / chronological view
+- Export filtered subsets as text or download
 
-### 🌐 Interface Discovery
+---
 
-Advanced network interface enumeration across your entire UniFi network:
+### Live Logs
 
-- **Multi-Device Scanning**: SSH into UDM, switches, and APs simultaneously
-- **Interface Details**: Name, type, state, MAC address, IP assignments, VLAN membership
-- **Traffic Statistics**: Real-time RX/TX byte counters, link speeds
-- **VLAN Mapping**: Automatic VLAN ID to network name correlation
-- **Hardware Insights**: Bridge VLAN memberships, link aggregation status
+Available from the Interfaces tab after interfaces are loaded. Streams system logs from any managed device in real time via SSH (`tail -f`).
 
-### 👁️ PCAP Viewer
+**Controls:**
 
-Interactive packet analysis interface for captured PCAP files:
+| Control | Description |
+|---|---|
+| Device selector | Choose any switch, AP, or gateway |
+| Plain text filter | Substring match |
+| Regex filter | `/pattern/` syntax |
+| Errors only | Show only ERROR-level lines |
+| Case sensitivity | Toggle |
+| Invert filter | Show non-matching lines only |
+| Auto-scroll | Scroll to newest entries |
+| Pause / Resume | Freeze the stream |
+| Clear | Wipe displayed lines |
 
-- **Packet Inspection**: Detailed protocol dissection with expandable layers
-- **Search & Filter**: Find specific packets by IP, port, protocol, or content
-- **Timeline View**: Chronological packet flow visualization
-- **Export Options**: Filtered PCAP subsets or formatted reports
+---
 
-### 📋 Live Logs
+## Supported Controllers & Devices
 
-Real-time log streaming from any managed UniFi device:
+**Controllers:**
+- UniFi Dream Machine (UDM)
+- UniFi Dream Machine Pro (UDM-Pro)
+- UniFi Dream Machine SE (UDM-SE)
+- UniFi Dream Router (UDR)
+- Legacy USG-based controllers (auto-detected)
 
-- **SSH-Based Streaming**: Connect via SSH and stream logs using `tail -f`
-- **Multiple Log Sources**: System messages, daemon logs, network events
-- **Real-Time Monitoring**: Live updates for troubleshooting and monitoring
-- **Device Selection**: Choose any connected switch, AP, or gateway
+**Managed devices (SSH):**
+- UniFi Access Points (UAP, UWA series)
+- UniFi Switches (USW, UBB series)
+- UniFi Gateways (UXG series)
 
-### 💾 Config Export
+**Multi-site:** All sections support multiple sites managed by a single controller.
 
-Automated UniFi configuration backup and export:
+---
 
-- **Complete Backup**: All controller settings, networks, devices, and policies
-- **Structured Output**: JSON format with human-readable timestamps
-- **Progress Tracking**: Real-time export progress with detailed logging
-- **Archive Management**: Organized file structure with timestamps
+## Enabling SSH on UDM
 
-### 🛠️ Device Management
-
-Comprehensive device inventory and management:
-
-- **Device Overview**: Model, firmware version, connectivity status, uptime
-- **Type Classification**: Gateways, switches, access points with specific details
-- **Bulk Operations**: Multi-device firmware checks and status monitoring
-- **Topology Insights**: Device relationships and network positioning
-
-### 🔐 Secure Credential Management
-
-Enterprise-grade credential storage and management:
-
-- **AES Encryption**: All credentials encrypted at rest using industry-standard encryption
-- **Memory-Only Decryption**: Passwords only decrypted in memory during active use
-- **Local Storage**: Credentials stored in `~/.unifi-analyzer/config.json`
-- **Multi-Profile Support**: Different credentials for different sites/controllers
+1. In UniFi Network: **Settings → System → SSH**
+2. Enable SSH and set a password (or upload a public key)
+3. Default username: `root`
 
 ---
 
 ## Security Notes
 
-- Credentials are **securely stored** locally in `~/.unifi-analyzer/config.json` with AES encryption
-- Passwords are encrypted at rest and only decrypted in memory during use
-- The backend connects to the UDM with `verify=False` (self-signed cert). Run this tool on your local network only.
-- SSH host keys are auto-accepted (suitable for a trusted LAN environment).
-- Do not expose port 8080 to the internet.
+- Credentials are encrypted at rest (AES-128-CBC / Fernet) in `~/.unifi-analyzer/config.json`
+- Passwords are decrypted in memory only during active use
+- The backend connects to the controller with `verify=False` — run on a trusted local network only
+- SSH host keys are auto-accepted (appropriate for a trusted LAN)
+- Do not expose port 8080 to the internet
 
 ---
 
@@ -234,33 +302,36 @@ Enterprise-grade credential storage and management:
 
 ```
 unifi-analyzer/
-├── main.py              # FastAPI backend + API routes
-├── unifi_client.py      # UniFi Controller REST API client
-├── config_analyzer.py   # Configuration analysis engine
-├── pcap_handler.py      # SSH PCAP capture + parser + AI formatter
-├── config_export.py     # UniFi configuration export utilities
-├── credentials.py       # Secure credential management
-├── app_launcher.py      # Application entry point for PyInstaller
+├── main.py              # FastAPI backend and all API routes
+├── unifi_client.py      # UniFi Controller REST API client (session-based auth)
+├── config_analyzer.py   # Configuration analysis and suggestion engine
+├── pcap_handler.py      # SSH PCAP capture, parser, and AI formatter
+├── config_export.py     # Configuration export utilities
+├── credentials.py       # AES-encrypted credential storage
+├── app_launcher.py      # Entry point for PyInstaller / macOS app
 ├── requirements.txt     # Python dependencies
-├── UniFi Analyzer.spec  # PyInstaller configuration
-├── rebuild_mac_app.sh  # Mac app build script
-├── fix_mac_app.sh      # Mac app fix script
-├── images/              # Application icons and assets
-│   ├── network_icon.icns
-│   ├── network_icon.png
-│   └── network_icon.svg
-├── foundry/             # Build artifacts directory
-│   ├── build/           # PyInstaller intermediate files
-│   └── dist/            # Final application bundles
-├── static/              # Web frontend assets
-│   └── index.html       # Single-page application
-└── __pycache__/         # Python bytecode cache
+├── UnifiAnalyzer.bat    # Windows one-click launcher
+├── install.bat          # Windows service installer (run as Administrator)
+├── uninstall.bat        # Windows service uninstaller
+├── UniFi Analyzer.spec  # PyInstaller build spec
+├── rebuild_mac_app.sh   # macOS app rebuild script
+├── fix_mac_app.sh       # macOS app fix script
+├── images/              # Application icons (ICNS, PNG, SVG)
+├── foundry/             # Build artifacts (build/, dist/)
+└── static/
+    └── index.html       # Single-page application (all UI)
 ```
 
----
+### Dependencies
 
-## Enabling SSH on UDM
-
-1. In UniFi Network: **Settings → System → SSH**
-2. Enable SSH and set a password (or upload an SSH key)
-3. Default username is `root`
+| Package | Purpose |
+|---|---|
+| `fastapi` | Web framework and API routing |
+| `uvicorn` | ASGI server |
+| `requests` | HTTP client for UniFi API calls |
+| `urllib3` | Connection pooling and SSL handling |
+| `paramiko` | SSH client for PCAP capture and interface discovery |
+| `pydantic` | Request/response data validation |
+| `cryptography` | AES credential encryption |
+| `pandas` | Data manipulation for export |
+| `openpyxl` | Excel (.xlsx) file generation |
