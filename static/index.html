@@ -607,12 +607,13 @@
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
   }
+  .iface-table tr.iface-row-capturable td { background: rgba(0,153,255,0.06); }
   .iface-table tr.iface-row-capturable { cursor: pointer; }
-  .iface-table tr.iface-row-capturable:hover td { background: rgba(0,153,255,0.04); }
-  .iface-table tr.iface-row-selected td { background: rgba(0,153,255,0.10) !important; }
-  .iface-table tr.iface-row-selected { outline: 1px solid var(--accent); }
-  .iface-table tr.iface-row-down { opacity: 0.45; }
+  .iface-table tr.iface-row-capturable:hover td { background: rgba(0,153,255,0.12); }
   .iface-table tr.iface-row-no-capture { cursor: default; }
+  .iface-table tr.iface-row-selected td { background: rgba(0,153,255,0.22) !important; }
+  .iface-table tr.iface-row-selected { outline: 1px solid var(--accent); }
+  .iface-table tr.iface-row-down { opacity: 0.45; cursor: default; }
 
   .iface-port-name {
     display: flex;
