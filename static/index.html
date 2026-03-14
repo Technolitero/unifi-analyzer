@@ -1427,9 +1427,9 @@
       <div id="exportToolbar" style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--surface2);border-bottom:1px solid var(--border)">
         <span id="exportRowCount" style="font-size:11px;color:var(--text-dim)"></span>
         <div style="display:flex;gap:8px">
-          <button onclick="exportTableCSV()" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa">
+          <button onclick="exportTableCSV()" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e">
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
-            Export CSV
+            Export Excel
           </button>
           <button onclick="exportAllToExcel()" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e">
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
@@ -2134,12 +2134,11 @@ function exportInterfacesCsv() {
     rows.push(row.join(','));
   }
 
-  const ts = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
   const blob = new Blob([rows.join('\r\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `interfaces_${ts}.csv`;
+  a.download = `${_exportFilename('interfaces')}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2759,20 +2758,45 @@ function _humanUptime(v) {
   return rh ? `${d}d ${rh}h` : `${d}d`;
 }
 
+function _exportFilename(suffix) {
+  const host = (document.getElementById('creds-host') || {}).value || 'udm';
+  const safeHost = host.trim().replace(/[^a-zA-Z0-9._-]/g, '_') || 'udm';
+  const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-').replace(/\./g, '-');
+  return `${safeHost}-${ts}${suffix ? '-' + suffix : ''}`;
+}
+
 function exportTableCSV() {
-  const esc = v => { const s = v == null ? '' : String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s; };
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded. Please refresh the page.'); return; }
   const rawRows = _exportSection === 'ports'
     ? (_livePortsData || [])
     : _defaultSort(_exportSection, (_exportData && _exportSite ? ((_exportData.sites[_exportSite] || {})[_exportSection] || []) : []));
   if (!rawRows.length) { alert('No data to export.'); return; }
   if (_exportSection !== 'ports' && (!_exportData || !_exportSite)) return;
   const cfg = _getSectionConfig(_exportSection, rawRows);
-  const csv = [cfg.cols.map(c => c.toUpperCase()).join(','), ...rawRows.map(r => cfg.cols.map(c => esc(cfg.transform(c, r[c], r))).join(','))].join('\r\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-  a.download = `unifi_${_exportSection}_${_exportSite || 'export'}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const header = cfg.cols.map(c => c.toUpperCase());
+  const mapped = rawRows.map(r => {
+    const out = {};
+    for (const c of cfg.cols) out[c.toUpperCase()] = cfg.transform(c, r[c], r);
+    return out;
+  });
+  const ws = XLSX.utils.json_to_sheet(mapped, { header });
+  // Style header row
+  const colCount = header.length;
+  for (let i = 0; i < colCount; i++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: i });
+    if (ws[addr]) ws[addr].s = { fill: { fgColor: { rgb: 'F97316' } }, font: { bold: true, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center' } };
+  }
+  // Auto-fit column widths
+  const colWidths = header.map(h => h.length);
+  mapped.forEach(row => header.forEach((h, i) => {
+    const val = row[h] == null ? '' : String(row[h]);
+    if (val.length > colWidths[i]) colWidths[i] = val.length;
+  }));
+  ws['!cols'] = colWidths.map(w => ({ wch: Math.min(w + 2, 60) }));
+  const sectionName = _exportSection.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sectionName);
+  XLSX.writeFile(wb, `${_exportFilename(_exportSection)}.xlsx`);
 }
 
 function exportAllToExcel() {
@@ -2834,7 +2858,7 @@ function exportAllToExcel() {
     }
     XLSX.utils.book_append_sheet(wb, ws, sec.name);
   }
-  XLSX.writeFile(wb, `unifi_config_${_exportSite}.xlsx`);
+  XLSX.writeFile(wb, `${_exportFilename('config')}.xlsx`);
 }
 
 function ifaceIcon(type) {
