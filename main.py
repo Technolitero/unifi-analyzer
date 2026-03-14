@@ -470,6 +470,27 @@ async def fetch_all_interfaces(params: AllInterfacesParams):
                 "mac": dmac,
             }
 
+    # Build reverse uplink lookup: (upstream_mac, port_idx) -> [device summaries]
+    # Each managed device reports which port on its upstream device it is connected to.
+    _uplinked_by_port: dict[tuple, list] = {}
+    for d in raw_devices:
+        uplink = d.get("uplink") or {}
+        up_mac = (uplink.get("uplink_mac") or "").lower().strip()
+        up_port = uplink.get("port_idx")
+        if not up_mac or up_port is None:
+            continue
+        try:
+            port_int = int(up_port)
+        except (ValueError, TypeError):
+            continue
+        dmac = (d.get("mac") or "").lower().strip()
+        _uplinked_by_port.setdefault((up_mac, port_int), []).append({
+            "name": d.get("name") or d.get("hostname", ""),
+            "type": _classify_device_type(d.get("type", "") or ""),
+            "ip": d.get("ip", ""),
+            "mac": dmac,
+        })
+
     devices = []
     # port_tables: device_ip -> list of port_table entries from the UniFi API
     port_tables: dict[str, list] = {}
@@ -532,14 +553,16 @@ async def fetch_all_interfaces(params: AllInterfacesParams):
                 return []
             return _client_by_port.get((dev_mac, int(port_idx_val)), [])
 
-        def _get_uplink_device(port_idx_val) -> Optional[dict]:
-            """Return a UniFi device connected to this port (device-to-device uplink)."""
+        def _get_uplinked_devices(port_idx_val) -> list:
+            """Return all UniFi devices uplinked to this port (switch/AP → this device)."""
             if not dev_mac or port_idx_val is None:
-                return None
+                return []
             try:
                 pidx_int = int(port_idx_val)
             except (ValueError, TypeError):
-                return None
+                return []
+            found: list = list(_uplinked_by_port.get((dev_mac, pidx_int), []))
+            # Also check raw_clients for managed devices reporting sw_mac/sw_port
             for c in raw_clients:
                 if (c.get("sw_mac") or "").lower() != dev_mac:
                     continue
@@ -548,11 +571,17 @@ async def fetch_all_interfaces(params: AllInterfacesParams):
                         continue
                 except (ValueError, TypeError):
                     continue
-                # Check if this client MAC is a known UniFi device (uplink)
                 cmac = (c.get("mac") or "").lower().strip()
                 if cmac in _device_by_mac:
-                    return _device_by_mac[cmac]
-            return None
+                    dev_entry = _device_by_mac[cmac]
+                    if not any(x["mac"] == cmac for x in found):
+                        found.append(dev_entry)
+            return found
+
+        def _get_uplink_device(port_idx_val) -> Optional[dict]:
+            """Return first uplinked UniFi device for backward compatibility."""
+            devs = _get_uplinked_devices(port_idx_val)
+            return devs[0] if devs else None
 
         for iface in ifaces:
             iface["device_ip"] = device["ip"]
@@ -564,9 +593,10 @@ async def fetch_all_interfaces(params: AllInterfacesParams):
             pidx = iface.get("port_idx")
             if pidx is not None:
                 iface["connected_clients"] = _get_connected(pidx)
-                updev = _get_uplink_device(pidx)
-                if updev:
-                    iface["connected_device"] = updev
+                updevs = _get_uplinked_devices(pidx)
+                if updevs:
+                    iface["connected_device"] = updevs[0]
+                    iface["uplinked_devices"] = updevs
 
         # Supplement from UniFi API port_table (catches hw-switched ports SSH can't see)
         known_names = {i["name"] for i in ifaces}
@@ -583,9 +613,10 @@ async def fetch_all_interfaces(params: AllInterfacesParams):
                         iface.setdefault("port_label", port_label)
                         iface.setdefault("port_idx", port_idx)
                         iface.setdefault("connected_clients", _get_connected(port_idx))
-                        updev = _get_uplink_device(port_idx)
-                        if updev:
-                            iface.setdefault("connected_device", updev)
+                        updevs = _get_uplinked_devices(port_idx)
+                        if updevs:
+                            iface.setdefault("connected_device", updevs[0])
+                            iface.setdefault("uplinked_devices", updevs)
                 continue
             # Use ifname if available, otherwise synthesize from port index
             # (hardware-switched ports may not have a Linux interface name)
@@ -618,8 +649,10 @@ async def fetch_all_interfaces(params: AllInterfacesParams):
                 "device_type": device["type"],
                 "connected_clients": _get_connected(port_idx),
             }
-            if _updev:
-                _new_iface["connected_device"] = _updev
+            _updevs = _get_uplinked_devices(port_idx)
+            if _updevs:
+                _new_iface["connected_device"] = _updevs[0]
+                _new_iface["uplinked_devices"] = _updevs
             ifaces.append(_new_iface)
             known_names.add(effective_name)
 

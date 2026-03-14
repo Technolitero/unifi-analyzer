@@ -614,6 +614,12 @@
   .iface-table tr.iface-row-selected td { background: rgba(0,153,255,0.22) !important; }
   .iface-table tr.iface-row-selected { outline: 1px solid var(--accent); }
   .iface-table tr.iface-row-down { opacity: 0.45; cursor: default; }
+  .conn-toggle { background:none;border:none;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap; }
+  .conn-toggle:hover { color:var(--text); }
+  .conn-toggle svg { transition: transform 0.15s; flex-shrink:0; }
+  .conn-toggle.open svg { transform: rotate(90deg); }
+  .conn-list { display:none;margin-top:4px;padding-left:4px;border-left:2px solid var(--border); }
+  .conn-list.open { display:block; }
 
   .iface-port-name {
     display: flex;
@@ -1957,7 +1963,6 @@ function renderInterfaceList(list) {
     '<th>Speed</th>',
     '<th>RX</th>',
     '<th>TX</th>',
-    '<th>Connected</th>',
   ].join('');
 
   const rows = list.map(iface => {
@@ -1987,19 +1992,35 @@ function renderInterfaceList(list) {
     else if (iface.parent) metaLine.push(`parent: ${iface.parent}`);
     if (notCapturable && !isDown) metaLine.push('no capture');
 
-    // Connected clients / uplink device
+    // Uplinked UniFi devices (switches, APs)
+    const uplinkedDevs = iface.uplinked_devices || [];
+    let uplinkedHtml = '';
+    if (uplinkedDevs.length === 1) {
+      const d = uplinkedDevs[0];
+      uplinkedHtml = `<div style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--warning)">${deviceTypeIcon(d.type)}${escHtml(d.name)}${d.ip ? ` <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(${escHtml(d.ip)})</span>` : ''}</div>`;
+    } else if (uplinkedDevs.length > 1) {
+      const ddId = `updev-${key.replace(/[^a-z0-9]/gi, '_')}`;
+      const items = uplinkedDevs.map(d => `<div style="font-size:11px;padding:1px 0;display:flex;align-items:center;gap:4px;white-space:nowrap;color:var(--warning);font-weight:600">${deviceTypeIcon(d.type)}${escHtml(d.name)}${d.ip ? ` <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(${escHtml(d.ip)})</span>` : ''}</div>`).join('');
+      uplinkedHtml = `<button class="conn-toggle" style="color:var(--warning)" onclick="event.stopPropagation();this.classList.toggle('open');document.getElementById('${ddId}').classList.toggle('open')">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M9 18l6-6-6-6"/></svg>
+        ${uplinkedDevs.length} devices
+      </button><div id="${ddId}" class="conn-list">${items}</div>`;
+    }
+
+    // Connected end-user clients
     const connClients = iface.connected_clients || [];
-    const connDevice = iface.connected_device || null;
-    let connHtml = '';
-    if (connDevice) {
-      connHtml = `<div style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--warning)">${deviceTypeIcon(connDevice.type)}${escHtml(connDevice.name)}${connDevice.ip ? ` <span style="font-size:10px;font-weight:400;color:var(--text-dim)">(${escHtml(connDevice.ip)})</span>` : ''}</div>`;
-    } else if (connClients.length > 0) {
-      const MAX = 3;
-      const shown = connClients.slice(0, MAX);
-      const rest = connClients.length - MAX;
-      connHtml = `<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:2px">Connected (${connClients.length})</div>`
-        + shown.map(c => `<div style="font-size:11px;white-space:nowrap"><span style="font-weight:600">${escHtml(c.hostname || c.mac || 'unknown')}</span>${c.ip ? ` <span style="color:var(--accent);font-family:var(--mono);font-size:10px">${escHtml(c.ip)}</span>` : ''}</div>`).join('')
-        + (rest > 0 ? `<div style="font-size:10px;color:var(--text-dim);font-style:italic">+${rest} more</div>` : '');
+    let clientsHtml = '';
+    if (connClients.length > 0) {
+      const ddId = `conn-${key.replace(/[^a-z0-9]/gi, '_')}`;
+      const items = connClients.map(c => {
+        const name = c.hostname || c.ip || 'Unknown';
+        const showIp = c.ip && c.ip !== name;
+        return `<div style="font-size:11px;padding:1px 0;white-space:nowrap"><span style="font-weight:600">${escHtml(name)}</span>${showIp ? ` <span style="color:var(--accent);font-family:var(--mono);font-size:10px">${escHtml(c.ip)}</span>` : ''}</div>`;
+      }).join('');
+      clientsHtml = `<button class="conn-toggle" onclick="event.stopPropagation();this.classList.toggle('open');document.getElementById('${ddId}').classList.toggle('open')">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M9 18l6-6-6-6"/></svg>
+        ${connClients.length} clients
+      </button><div id="${ddId}" class="conn-list">${items}</div>`;
     }
 
     const deviceCol = showDeviceCol ? `<td>
@@ -2036,7 +2057,6 @@ function renderInterfaceList(list) {
       <td style="font-size:11px;text-align:right;white-space:nowrap">${escHtml(spd)}</td>
       <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${iface.rx_bytes ? fmtBytes(iface.rx_bytes) : ''}</td>
       <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${iface.tx_bytes ? fmtBytes(iface.tx_bytes) : ''}</td>
-      <td>${connHtml}</td>
     </tr>`;
   }).join('');
 
