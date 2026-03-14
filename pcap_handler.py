@@ -38,6 +38,8 @@ class PcapCapture:
             port=self.port,
             username=self.username,
             timeout=15,
+            banner_timeout=30,
+            auth_timeout=30,
             allow_agent=False,
             look_for_keys=False,
         )

@@ -633,6 +633,43 @@ class UniFiOSClient:
             results[self_ep] = res
             safe_write_json(out_dir / f"{self_ep.replace('/', '_')}.json", res, strip_all_ids=strip_all_ids, extra_strip=extra_strip, humanize=humanize)
 
+        # Integration API v1: per-device interface details
+        integration_devices: List[Dict] = []
+        try:
+            sites_res = self.get_json(self.network_api("integration/v1/sites"))
+            int_sites = try_get(sites_res, "payload", default=[])
+            if isinstance(int_sites, dict):
+                int_sites = int_sites.get("data", []) or []
+            int_site_id = None
+            for s in (int_sites if isinstance(int_sites, list) else []):
+                if isinstance(s, dict):
+                    int_site_id = s.get("siteId") or s.get("id")
+                    if int_site_id:
+                        break
+            if int_site_id:
+                devs_res = self.get_json(self.network_api(f"integration/v1/sites/{int_site_id}/devices"))
+                devs_list = try_get(devs_res, "payload", default=[])
+                if isinstance(devs_list, dict):
+                    devs_list = devs_list.get("data", []) or []
+                for dev in (devs_list if isinstance(devs_list, list) else []):
+                    if not isinstance(dev, dict):
+                        continue
+                    device_id = dev.get("id")
+                    if not device_id:
+                        continue
+                    d_res = self.get_json(self.network_api(f"integration/v1/sites/{int_site_id}/devices/{device_id}"))
+                    d_data = try_get(d_res, "payload", default={})
+                    if isinstance(d_data, dict) and d_data:
+                        integration_devices.append(d_data)
+                    time.sleep(0.05)
+        except Exception:
+            pass
+        safe_write_json(
+            out_dir / "integration_devices.json",
+            {"status_code": 200, "payload": {"data": integration_devices}},
+            strip_all_ids=strip_all_ids, extra_strip=extra_strip, humanize=humanize,
+        )
+
         return results
 
 # ---------------- Delta / Validation / Order / Excel ----------------

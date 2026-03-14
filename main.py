@@ -132,7 +132,7 @@ class SavedConfig(BaseModel):
     api_site: str = "default"
     api_username: str = ""
     api_password: str = ""
-    api_key: str = ""
+
     ssh_port: int = 22
     udm_ssh_username: str = "root"
     udm_ssh_password: str = ""
@@ -179,14 +179,22 @@ async def analyze(params: ConnectionParams):
     def _summarize_devices(raw: list) -> list:
         out = []
         for d in raw:
+            raw_type = (d.get("type") or "").lower()
+            is_ap = raw_type.startswith("uap") or raw_type.startswith("uwa")
+            # Mesh enabled: AP has mesh VAP active or a wireless uplink
+            mesh_enabled = False
+            if is_ap:
+                mesh_enabled = bool(d.get("mesh_sta_vap_enabled")) or \
+                               (d.get("uplink") or {}).get("type") == "wireless"
             out.append({
                 "name": d.get("name") or d.get("hostname", ""),
                 "ip": d.get("ip", ""),
                 "mac": d.get("mac", ""),
-                "type": _fmt_dev_type(d.get("type", "")),
+                "type": _fmt_dev_type(raw_type),
                 "model": d.get("model", ""),
                 "version": d.get("version", ""),
                 "connected": d.get("state", 0) == 1,
+                "mesh_enabled": mesh_enabled,
             })
         return out
 
@@ -730,6 +738,8 @@ async def stream_logs(
                 username=ssh_username,
                 password=ssh_password or None,
                 timeout=15,
+                banner_timeout=30,
+                auth_timeout=30,
                 look_for_keys=False,
                 allow_agent=False,
             )
@@ -790,6 +800,82 @@ async def stream_logs(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _build_ports(devices_raw: list, portconf_raw: list) -> list:
+    """Build port rows from UniFi stat/device and portconf data."""
+    portconf_by_id = {
+        p.get("_id"): p.get("name")
+        for p in portconf_raw
+        if isinstance(p, dict) and p.get("_id") and p.get("name")
+    }
+    rows = []
+    for d in devices_raw:
+        raw_type = (d.get("type") or "").lower()
+        is_switch  = raw_type.startswith("usw") or raw_type.startswith("ubb")
+        is_gateway = raw_type.startswith("udm") or raw_type.startswith("uxg") or raw_type in ("ugw", "usg")
+        if not (is_switch or is_gateway):
+            continue
+        device_name = d.get("name") or d.get("hostname") or d.get("mac", "")
+        port_overrides = {
+            po.get("port_idx"): po
+            for po in (d.get("port_overrides") or [])
+            if isinstance(po, dict)
+        }
+        for port in (d.get("port_table") or []):
+            if not isinstance(port, dict):
+                continue
+            port_idx = port.get("port_idx")
+            override = port_overrides.get(port_idx, {})
+            portconf_id = override.get("portconf_id") or port.get("portconf_id")
+            row = {
+                "_sort_gateway": 0 if is_gateway else 1,
+                "_sort_device":  device_name.lower(),
+                "device":  device_name,
+                "port":    port_idx,
+                "name":    port.get("name") or f"Port {port_idx}",
+                "profile": portconf_by_id.get(portconf_id) if portconf_id else None,
+                "enabled": port.get("enable"),
+                "up":      port.get("up"),
+                "speed":   port.get("speed"),
+                "duplex":  "full" if port.get("full_duplex") is True else ("half" if port.get("full_duplex") is False else None),
+                "media":   port.get("media"),
+                "poe":     port.get("poe_mode") or override.get("poe_mode"),
+            }
+            rows.append({k: v for k, v in row.items() if v is not None})
+    rows.sort(key=lambda r: (r.pop("_sort_gateway"), r.pop("_sort_device"), r.get("port") or 0))
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Live ports fetch — switch + UDM port_table from stat/device
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ports")
+async def fetch_ports_live(
+    host: str = Query(...),
+    username: str = Query(...),
+    password: str = Query(...),
+    site: str = Query(default="default"),
+):
+    clean_host = re.sub(r'^https?://', '', host).rstrip('/')
+    client = UnifiClient(host=clean_host, username=username, password=password, site=site)
+    try:
+        client.login()
+        devices = client.get_devices()
+        try:
+            portconf_data = client._get("rest/portconf").get("data", [])
+        except Exception:
+            portconf_data = []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
+
+    return {"ports": _build_ports(devices, portconf_data)}
 
 
 # ---------------------------------------------------------------------------
@@ -864,14 +950,9 @@ async def config_lookup_fetch(
     host: str = Query(...),
     username: str = Query(...),
     password: str = Query(...),
-    api_key: str = Query(default=""),
     site: str = Query(default="default"),
 ):
-    """Fetch all Config Lookup data live from the UniFi controller.
-
-    Firewall zones and policies use the Integration API v1 (requires api_key).
-    All other sections use session-based auth.
-    """
+    """Fetch all Config Lookup data live from the UniFi controller using session-based auth."""
     def _join(val) -> str:
         if val is None:
             return ""
@@ -964,12 +1045,7 @@ async def config_lookup_fetch(
         for z in firewall_zones_v2_raw if isinstance(z, dict)
     ]
 
-    # --- Integration API v1 (optional — used only if API key provided) ---
     firewall_policies: list = []
-
-    # Sanitize API key: HTTP headers require latin-1; strip whitespace and non-printable-ASCII
-    api_key = re.sub(r"[^\x21-\x7E]", "", api_key.strip())
-
     integration_error: str = ""
 
     _excl_pc = {"native_networkconf_id", "port_security_mac_address_site_id", "_id", "site_id"}
@@ -1072,6 +1148,7 @@ async def config_lookup_fetch(
             {k: v for k, v in r.items() if k not in _excl_rt}
             for r in routing_raw if isinstance(r, dict)
         ],
+        "ports": _build_ports(devices_raw, port_profiles_raw),
     }
 
 
@@ -1110,6 +1187,26 @@ async def preview_export(job_id: str):
         if isinstance(values, list):
             return "; ".join(str(v) for v in values if v)
         return str(values)
+
+    def _build_switch_ports(site_dir: Path, devices_raw: list) -> list:
+        """Extract per-port interface data from integration API device responses."""
+        int_devices = _unifi_data(site_dir / "integration_devices.json") if (site_dir / "integration_devices.json").exists() else []
+
+        rows = []
+        for dev in int_devices:
+            if not isinstance(dev, dict):
+                continue
+            interfaces = dev.get("interfaces") or []
+            if not interfaces:
+                continue
+            device_name = dev.get("name") or dev.get("hostname") or dev.get("id", "")
+            for iface in interfaces:
+                if not isinstance(iface, dict):
+                    continue
+                row = {"device_name": device_name}
+                row.update(iface)
+                rows.append(row)
+        return rows
 
     def _build_firewall_rules(site_dir: Path) -> list:
         # Build group lookup from rest_firewallgroup.json
@@ -1204,6 +1301,7 @@ async def preview_export(job_id: str):
                     "is_wired": c.get("is_wired"), "uptime": c.get("uptime")} for c in clients_raw if isinstance(c, dict)]
 
         firewall = _build_firewall_rules(site_dir)
+        switch_ports = _build_switch_ports(site_dir, devices_raw)
 
         port_fw_raw = _load("rest_portforward.json") or _load("stat_portforward.json")
         port_fw = [{"name": p.get("name"), "proto": p.get("proto"),
@@ -1228,6 +1326,7 @@ async def preview_export(job_id: str):
             "firewall": firewall,
             "port_forward": port_fw,
             "port_profiles": port_profiles,
+            "ports": switch_ports,
             "routing": routing,
         }
 

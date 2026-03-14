@@ -1071,7 +1071,7 @@
     .port-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
 
@@ -1115,10 +1115,6 @@
     <div class="creds-field">
       <label for="creds-api-pass">API Password</label>
       <input id="creds-api-pass" class="w-pass" type="password" placeholder="••••••••" autocomplete="off">
-    </div>
-    <div class="creds-field">
-      <label for="creds-api-key">API Key</label>
-      <input id="creds-api-key" class="w-pass" type="password" placeholder="••••••••" autocomplete="off" spellcheck="false">
     </div>
   </div>
 
@@ -1369,17 +1365,6 @@
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"/></svg>
         Load Config
       </button>
-      <div style="width:1px;height:20px;background:var(--border);margin:0 2px"></div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="export-humanize"> Humanize timestamps
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="export-strip-ids"> Strip IDs
-      </label>
-      <button class="btn" id="exportRunBtn" onclick="runConfigExport()" style="white-space:nowrap;margin-left:auto">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
-        Export Files
-      </button>
       <!-- Download buttons (hidden until export job completes) -->
       <div id="exportDownloads" style="display:none;gap:8px;flex-wrap:wrap;align-items:center">
         <span style="font-size:11px;color:var(--success);font-weight:600">&#10003; Ready</span>
@@ -1420,6 +1405,7 @@
         <button class="export-sec-tab" data-sec="routing" onclick="switchExportSection('routing')">Routing</button>
         <button class="export-sec-tab" data-sec="port_forward" onclick="switchExportSection('port_forward')">Port Forwards</button>
         <button class="export-sec-tab" data-sec="port_profiles" onclick="switchExportSection('port_profiles')">Port Profiles</button>
+        <button class="export-sec-tab" data-sec="ports" onclick="switchExportSection('ports')">Ports</button>
         <button class="export-sec-tab" data-sec="devices" onclick="switchExportSection('devices')">Devices</button>
         <button class="export-sec-tab" data-sec="clients" onclick="switchExportSection('clients')">Clients</button>
       </div>
@@ -1499,12 +1485,21 @@ function switchToTab(tab) {
   document.getElementById('panel-interfaces').style.display  = tab === 'pcap'    ? 'block'  : 'none';
   document.getElementById('panel-pcap').style.display        = tab === 'viewer'  ? 'block'  : 'none';
   document.getElementById('panel-export').style.display      = tab === 'export'  ? 'flex'   : 'none';
+
+  // Device filter bar is only relevant on the Interfaces tab
+  const deviceBar = document.getElementById('deviceBar');
+  if (tab === 'pcap') {
+    if (allInterfaces.length) deviceBar.classList.add('visible');
+  } else {
+    deviceBar.classList.remove('visible');
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Analysis
 // ---------------------------------------------------------------------------
 async function runAnalysis() {
+  saveConfig();
   const host = document.getElementById('creds-host').value.trim();
   const port = document.getElementById('creds-api-port').value;
   const site = document.getElementById('creds-api-site').value.trim();
@@ -1666,7 +1661,7 @@ function renderStatTable(key, items) {
   };
 
   if (key === 'devices') {
-    const head = `<thead><tr><th>Name</th><th>IP</th><th>Type</th><th>Model</th><th>Version</th><th>MAC</th><th>Status</th></tr></thead>`;
+    const head = `<thead><tr><th>Name</th><th>IP</th><th>Type</th><th>Model</th><th>Version</th><th>MAC</th><th>Status</th><th>Mesh</th></tr></thead>`;
     const rows = items.map(d => `<tr>
       <td>${escHtml(d.name || '—')}</td>
       <td>${escHtml(d.ip || '—')}</td>
@@ -1675,6 +1670,7 @@ function renderStatTable(key, items) {
       <td>${escHtml(d.version || '—')}</td>
       <td>${escHtml(d.mac || '—')}</td>
       <td><span class="detail-badge ${d.connected ? 'detail-up' : 'detail-down'}">${d.connected ? 'Online' : 'Offline'}</span></td>
+      <td>${d.type === 'AP' ? (d.mesh_enabled ? '<span class="sug-badge medium" title="Meshing is enabled on this AP">Mesh On</span>' : '<span style="color:var(--text-dim);font-size:11px">Off</span>') : '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
     </tr>`).join('');
     return head + '<tbody>' + rows + '</tbody>';
   }
@@ -1778,6 +1774,7 @@ function deviceTypeIcon(type) {
 }
 
 async function loadInterfaces() {
+  saveConfig();
   const host = document.getElementById('creds-host').value.trim();
   const apiPort = parseInt(document.getElementById('creds-api-port').value) || 443;
   const apiSite = document.getElementById('creds-api-site').value.trim() || 'default';
@@ -2140,6 +2137,7 @@ let _exportJobId = null;
 let _exportEvtSource = null;
 let _exportData = null;   // { sites: { siteName: { networks, wifi, firewall, ... } } }
 let _exportSite = null;   // currently selected site name
+let _livePortsData = null; // live-fetched ports (bypasses export job)
 let _exportSection = 'networks';
 
 async function runConfigExport() {
@@ -2168,10 +2166,7 @@ async function runConfigExport() {
 
   if (_exportEvtSource) { _exportEvtSource.close(); _exportEvtSource = null; }
 
-  const humanize = document.getElementById('export-humanize').checked;
-  const stripIds = document.getElementById('export-strip-ids').checked;
-
-  const params = new URLSearchParams({ host, username, password, humanize_epochs: humanize, strip_all_ids: stripIds });
+  const params = new URLSearchParams({ host, username, password, humanize_epochs: false, strip_all_ids: false });
   _exportEvtSource = new EventSource(`/api/export-config/run?${params}`);
 
   _exportEvtSource.onmessage = async (e) => {
@@ -2228,6 +2223,7 @@ async function runConfigExport() {
 }
 
 async function runConfigLookup() {
+  saveConfig();
   const host     = document.getElementById('creds-host').value.trim();
   const username = document.getElementById('creds-api-user').value.trim();
   const password = document.getElementById('creds-api-pass').value;
@@ -2247,9 +2243,8 @@ async function runConfigLookup() {
   btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Loading…';
 
   try {
-    const apiKey = document.getElementById('creds-api-key').value.trim();
     const site = document.getElementById('creds-api-site').value.trim() || 'default';
-    const params = new URLSearchParams({ host, username, password, site, ...(apiKey && { api_key: apiKey }) });
+    const params = new URLSearchParams({ host, username, password, site });
     const res = await fetch(`/api/config-lookup/fetch?${params}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -2267,6 +2262,7 @@ async function runConfigLookup() {
     _exportSection = 'networks';
     renderExportSiteTabs([siteName]);
     renderExportSectionTabs();
+    _livePortsData = data.ports || [];
     renderExportTable();
     document.getElementById('exportDataViewer').style.display = 'flex';
     document.getElementById('exportDataViewer').style.flexDirection = 'column';
@@ -2294,6 +2290,7 @@ async function loadExportPreview(jobId) {
       renderExportTable();
       document.getElementById('exportDataViewer').style.display = 'flex';
       document.getElementById('exportDataViewer').style.flexDirection = 'column';
+      loadPortsLive();
     }
   } catch (err) {
     // Non-fatal — data is still downloadable even if preview fails
@@ -2324,7 +2321,37 @@ function renderExportSectionTabs() {
 function switchExportSection(sec) {
   _exportSection = sec;
   renderExportSectionTabs();
-  renderExportTable();
+  if (sec === 'ports') {
+    loadPortsLive();
+  } else {
+    renderExportTable();
+  }
+}
+
+async function loadPortsLive() {
+  const area = document.getElementById('exportTableArea');
+  const rc = document.getElementById('exportRowCount');
+  const host = (document.getElementById('creds-host') || {}).value?.trim();
+  const user = (document.getElementById('creds-api-user') || {}).value?.trim();
+  const pass = (document.getElementById('creds-api-pass') || {}).value;
+  const site = (document.getElementById('creds-api-site') || {}).value?.trim() || 'default';
+  if (!host || !user || !pass) {
+    area.innerHTML = '<div class="empty-note">Enter host and credentials above, then click Ports.</div>';
+    if (rc) rc.textContent = '';
+    return;
+  }
+  area.innerHTML = '<div class="empty-note">Loading ports…</div>';
+  if (rc) rc.textContent = '';
+  try {
+    const params = new URLSearchParams({ host, username: user, password: pass, site });
+    const res = await fetch(`/api/ports?${params}`);
+    if (!res.ok) { const t = await res.text(); throw new Error(t); }
+    const data = await res.json();
+    _livePortsData = data.ports || [];
+    renderExportTable();
+  } catch(e) {
+    area.innerHTML = `<div class="empty-note">Error loading ports: ${e.message}</div>`;
+  }
 }
 
 function _badge(val, trueLabel, falseLabel) {
@@ -2343,6 +2370,19 @@ function _cell(val) {
 // Sort state per section: { [sec]: { col, dir } }
 const _exportSortState = {};
 
+function _ipToNum(s) {
+  const p = String(s).split('/')[0].split('.');
+  if (p.length !== 4) return null;
+  const n = p.reduce((acc, o) => { const v = parseInt(o, 10); return isNaN(v) || v < 0 || v > 255 ? NaN : acc * 256 + v; }, 0);
+  return isNaN(n) ? null : n;
+}
+
+function _macToNum(s) {
+  const hex = String(s).replace(/[:\-]/g, '');
+  if (!/^[0-9a-fA-F]{12}$/.test(hex)) return null;
+  return parseInt(hex, 16);
+}
+
 function _sortRows(rows, col, dir) {
   if (!col) return rows;
   return [...rows].sort((a, b) => {
@@ -2350,11 +2390,15 @@ function _sortRows(rows, col, dir) {
     if (av == null && bv == null) return 0;
     if (av == null) return 1;
     if (bv == null) return -1;
+    const ai = _ipToNum(av), bi = _ipToNum(bv);
+    if (ai !== null && bi !== null) return dir === 'asc' ? ai - bi : bi - ai;
+    const am = _macToNum(av), bm = _macToNum(bv);
+    if (am !== null && bm !== null) return dir === 'asc' ? am - bm : bm - am;
     const an = parseFloat(av), bn = parseFloat(bv);
     if (!isNaN(an) && !isNaN(bn)) return dir === 'asc' ? an - bn : bn - an;
     av = String(av).toLowerCase();
     bv = String(bv).toLowerCase();
-    return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return dir === 'asc' ? av.localeCompare(bv, undefined, { numeric: true }) : bv.localeCompare(av, undefined, { numeric: true });
   });
 }
 
@@ -2383,9 +2427,22 @@ function _attachSortHandlers(sec) {
   });
 }
 
+function _isUdm(type) {
+  const t = (type || '').toLowerCase();
+  return t.startsWith('udm') || t.startsWith('uxg') || t === 'ugw' || t === 'usg';
+}
+
 function _defaultSort(sec, rows) {
   const state = _exportSortState[sec];
   if (state) return _sortRows(rows, state.col, state.dir);
+  // Devices: UDM/gateway first, then alphabetical by name
+  if (sec === 'devices') {
+    return [...rows].sort((a, b) => {
+      const ag = _isUdm(a.type) ? 0 : 1, bg = _isUdm(b.type) ? 0 : 1;
+      if (ag !== bg) return ag - bg;
+      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+    });
+  }
   // Default: alphabetical by name (or hostname for clients)
   const nameKey = rows.length && 'hostname' in rows[0] ? 'hostname' : 'name';
   if (rows.length && nameKey in rows[0]) return _sortRows(rows, nameKey, 'asc');
@@ -2394,9 +2451,15 @@ function _defaultSort(sec, rows) {
 
 function renderExportTable() {
   const area = document.getElementById('exportTableArea');
-  if (!_exportData || !_exportSite) { area.innerHTML = '<div class="empty-note">No data.</div>'; return; }
-  const site = _exportData.sites[_exportSite] || {};
-  const rawRows = site[_exportSection] || [];
+  let site = {};
+  let rawRows;
+  if (_exportSection === 'ports') {
+    rawRows = _livePortsData || [];
+  } else {
+    if (!_exportData || !_exportSite) { area.innerHTML = '<div class="empty-note">No data.</div>'; return; }
+    site = _exportData.sites[_exportSite] || {};
+    rawRows = site[_exportSection] || [];
+  }
 
   if (!rawRows.length) {
     area.innerHTML = `<div class="empty-note">No ${_exportSection} data for site <strong>${_exportSite}</strong>.</div>`;
@@ -2493,13 +2556,14 @@ function renderExportTable() {
     }
 
   } else if (sec === 'devices') {
-    const cols = ['name', 'model', 'ip', 'mac', 'type', 'state'];
+    const cols = ['name', 'model', 'ip', 'mac', 'type', 'state', 'uptime'];
     html = _buildTable(cols, rows, (c, v) => {
       if (c === 'state') {
         const color = v == 1 ? '#22c55e' : '#ef4444';
         const label = v == 1 ? 'Online' : v == 0 ? 'Offline' : _cell(v);
         return `<td><span style="color:${color};font-weight:600">${label}</span></td>`;
       }
+      if (c === 'uptime') return `<td>${v != null ? _humanUptime(v) : '—'}</td>`;
       if (c === 'ip') return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
       if (c === 'mac') return `<td style="font-family:var(--mono);font-size:10px">${_cell(v)}</td>`;
       if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
@@ -2507,9 +2571,10 @@ function renderExportTable() {
     }, sortCol, sortDir);
 
   } else if (sec === 'clients') {
-    const cols = ['hostname', 'ip', 'mac', 'network', 'oui', 'is_wired'];
+    const cols = ['hostname', 'ip', 'mac', 'network', 'oui', 'is_wired', 'uptime'];
     html = _buildTable(cols, rows, (c, v) => {
       if (c === 'is_wired') return `<td>${v === true || v === 'true' ? '<span class="badge badge-blue">Wired</span>' : '<span class="badge badge-yes">Wireless</span>'}</td>`;
+      if (c === 'uptime') return `<td>${v != null ? _humanUptime(v) : '—'}</td>`;
       if (c === 'ip') return `<td style="font-family:var(--mono)">${_cell(v)}</td>`;
       if (c === 'mac') return `<td style="font-family:var(--mono);font-size:10px">${_cell(v)}</td>`;
       return `<td>${_cell(v)}</td>`;
@@ -2523,6 +2588,23 @@ function renderExportTable() {
       if (boolCols.has(c)) return `<td>${_badge(v)}</td>`;
       if (c === 'name') return `<td><strong>${_cell(v)}</strong></td>`;
       return `<td>${_cell(v)}</td>`;
+    }, sortCol, sortDir);
+
+  } else if (sec === 'ports') {
+    const cols = ['device', 'port', 'name', 'profile', 'enabled', 'up', 'speed', 'duplex', 'media', 'poe'];
+    const _fixMedia = v => (typeof v === 'string' ? v.replace(/2P5GE/gi, '2.5GE') : v);
+    html = _buildTable(cols, rawRows, (c, v) => {
+      const fv = _fixMedia(v);
+      if (c === 'up') {
+        const isUp = fv === true || fv === 'true';
+        return `<td><span class="badge ${isUp ? 'badge-yes' : 'badge-no'}">${isUp ? 'Up' : 'Down'}</span></td>`;
+      }
+      if (c === 'enabled') return `<td>${_badge(fv)}</td>`;
+      if (c === 'device') return `<td><strong>${_cell(fv)}</strong></td>`;
+      if (c === 'speed' && fv != null) return `<td style="font-family:var(--mono)">${_cell(fv)}</td>`;
+      if (c === 'poe' && (fv == null || fv === '')) return `<td>off</td>`;
+      if (c === 'profile' && (fv == null || fv === '')) return `<td>No Profile</td>`;
+      return `<td>${_cell(fv)}</td>`;
     }, sortCol, sortDir);
 
   } else if (sec === 'routing') {
@@ -2563,16 +2645,105 @@ function downloadExport(type) {
   a.click();
 }
 
+function _getSectionConfig(sec, rawRows) {
+  const allKeys = rawRows.length ? Object.keys(rawRows[0]) : [];
+  const bool = v => v === true || v === 'true' ? 'Yes' : v === false || v === 'false' ? 'No' : (v == null ? '' : String(v));
+  const str  = v => v == null ? '' : String(v);
+
+  switch (sec) {
+    case 'networks':
+      return { cols: ['name', 'purpose', 'ip_subnet', 'enabled'],
+               transform: (c, v) => c === 'enabled' ? bool(v) : str(v) };
+    case 'wifi':
+      return { cols: ['name', 'security', 'band', 'vlan_id', 'hide_ssid', 'enabled'],
+               transform: (c, v) => {
+                 if (c === 'hide_ssid') return v === true || v === 'true' ? 'Hidden' : 'Visible';
+                 if (c === 'enabled') return bool(v);
+                 return str(v);
+               }};
+    case 'policy_groups':
+      return { cols: ['name', 'type', 'count', 'members'], transform: (c, v) => str(v) };
+    case 'dns_records':
+      return { cols: ['domain', 'type', 'value', 'ttl', 'enabled', 'priority', 'weight', 'port'],
+               transform: (c, v) => c === 'enabled' ? bool(v) : str(v) };
+    case 'firewall_zones':
+      return { cols: ['name', 'networks'], transform: (c, v) => str(v) };
+    case 'firewall': {
+      const priority = ['name', 'action', 'enabled', 'protocol', 'logging',
+                        'src_zone', 'dst_zone', 'src_address', 'dst_address', 'src_port', 'dst_port',
+                        'description', 'policy_id', 'src_ips', 'src_ports', 'src_groups'];
+      return { cols: [...priority.filter(c => allKeys.includes(c)), ...allKeys.filter(c => !priority.includes(c))],
+               transform: (c, v) => (c === 'enabled' || c === 'logging') ? bool(v) : str(v) };
+    }
+    case 'port_forward':
+      return { cols: ['name', 'enabled', 'proto', 'dst_port', 'fwd', 'fwd_port', 'src', 'interface', 'destination_ip', 'logging'],
+               transform: (c, v) => (c === 'enabled' || c === 'logging') ? bool(v) : str(v) };
+    case 'devices':
+      return { cols: ['name', 'model', 'ip', 'mac', 'type', 'state', 'uptime'],
+               transform: (c, v) => {
+                 if (c === 'state') return v == 1 ? 'Online' : v == 0 ? 'Offline' : str(v);
+                 if (c === 'uptime') return v != null ? _humanUptime(v) : '';
+                 return str(v);
+               }};
+    case 'clients':
+      return { cols: ['hostname', 'ip', 'mac', 'network', 'oui', 'is_wired', 'uptime'],
+               transform: (c, v) => {
+                 if (c === 'is_wired') return v === true || v === 'true' ? 'Wired' : 'Wireless';
+                 if (c === 'uptime') return v != null ? _humanUptime(v) : '';
+                 return str(v);
+               }};
+    case 'port_profiles': {
+      const boolCols = new Set(['enabled','autoneg','full_duplex','isolation','lldpmed_enabled','lldpmed_notify_enabled','dot1x_enabled']);
+      return { cols: rawRows.length ? ['name', ...Object.keys(rawRows[0]).filter(k => k !== 'name')] : ['name'],
+               transform: (c, v) => boolCols.has(c) ? bool(v) : str(v) };
+    }
+    case 'routing': {
+      const priority = ['name', 'type', 'enabled', 'gateway_type', 'static_route_network', 'static_route_next_hop', 'static_route_distance'];
+      return { cols: [...priority.filter(k => allKeys.includes(k)), ...allKeys.filter(k => !priority.includes(k))],
+               transform: (c, v) => c === 'enabled' ? bool(v) : str(v) };
+    }
+    default:
+      return { cols: allKeys, transform: (c, v) => str(v) };
+  }
+}
+
+function _humanUptime(v) {
+  const s = parseInt(v, 10);
+  if (isNaN(s) || v == null) return v;
+  if (s < 60) return `${s} sec`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  if (h < 24) return rm ? `${h}h ${rm}m` : `${h}h`;
+  const d = Math.floor(h / 24), rh = h % 24;
+  return rh ? `${d}d ${rh}h` : `${d}d`;
+}
+
 function exportTableCSV() {
-  if (!_exportData || !_exportSite) return;
-  const rows = (_exportData.sites[_exportSite] || {})[_exportSection] || [];
-  if (!rows.length) { alert('No data to export.'); return; }
-  const cols = Object.keys(rows[0]);
   const esc = v => { const s = v == null ? '' : String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\r\n');
+  let cols, mappedRows;
+  if (_exportSection === 'ports') {
+    const rawRows = _livePortsData || [];
+    if (!rawRows.length) { alert('No data to export.'); return; }
+    cols = ['device', 'port', 'name', 'profile', 'enabled', 'up', 'speed', 'duplex', 'media', 'poe'];
+    mappedRows = rawRows.map(r => cols.map(c => {
+      let v = r[c] ?? null;
+      if (v == null || v === '') return c === 'poe' ? 'off' : c === 'profile' ? 'No Profile' : '';
+      if (c === 'enabled' || c === 'up') return v === true || v === 'true' ? 'Yes' : 'No';
+      return typeof v === 'string' ? v.replace(/2P5GE/gi, '2.5GE') : String(v);
+    }));
+  } else {
+    if (!_exportData || !_exportSite) return;
+    const rawRows = _defaultSort(_exportSection, (_exportData.sites[_exportSite] || {})[_exportSection] || []);
+    if (!rawRows.length) { alert('No data to export.'); return; }
+    const cfg = _getSectionConfig(_exportSection, rawRows);
+    cols = cfg.cols;
+    mappedRows = rawRows.map(r => cols.map(c => cfg.transform(c, r[c])));
+  }
+  const csv = [cols.map(c => c.toUpperCase()).join(','), ...mappedRows.map(r => r.map(esc).join(','))].join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-  a.download = `unifi_${_exportSection}_${_exportSite}.csv`;
+  a.download = `unifi_${_exportSection}_${_exportSite || 'export'}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -2591,13 +2762,67 @@ function exportAllToExcel() {
     { key: 'routing',        name: 'Routing' },
     { key: 'port_forward',   name: 'Port Forwards' },
     { key: 'port_profiles',  name: 'Port Profiles' },
+    { key: 'ports',          name: 'Ports' },
     { key: 'devices',        name: 'Devices' },
     { key: 'clients',        name: 'Clients' },
   ];
+  const portCols = ['device', 'port', 'name', 'profile', 'enabled', 'up', 'speed', 'duplex', 'media', 'poe'];
   const wb = XLSX.utils.book_new();
   for (const sec of sections) {
-    const rows = site[sec.key];
-    const ws = (rows && rows.length) ? XLSX.utils.json_to_sheet(rows) : XLSX.utils.aoa_to_sheet([['No data available']]);
+    let rows = sec.key === 'ports' ? (_livePortsData || []) : _defaultSort(sec.key, site[sec.key] || []);
+    let ws;
+    if (rows && rows.length) {
+      if (sec.key === 'ports') {
+        const mapped = rows.map(r => {
+          const out = {};
+          for (const c of portCols) {
+            let v = r[c] ?? null;
+            if (v == null || v === '') {
+              v = c === 'poe' ? 'off' : c === 'profile' ? 'No Profile' : '';
+            } else if (typeof v === 'string') {
+              v = v.replace(/2P5GE/gi, '2.5GE');
+            }
+            out[c.toUpperCase()] = v;
+          }
+          return out;
+        });
+        ws = XLSX.utils.json_to_sheet(mapped, { header: portCols.map(c => c.toUpperCase()) });
+      } else {
+        const cfg = _getSectionConfig(sec.key, rows);
+        const header = cfg.cols.map(c => c.toUpperCase());
+        const mapped = rows.map(r => {
+          const out = {};
+          for (const c of cfg.cols) out[c.toUpperCase()] = cfg.transform(c, r[c]);
+          return out;
+        });
+        ws = XLSX.utils.json_to_sheet(mapped, { header });
+      }
+    } else {
+      ws = XLSX.utils.aoa_to_sheet([['No data available']]);
+    }
+    // Auto-fit column widths to the longest value in each column
+    const ref = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    const colWidths = [];
+    for (let C = ref.s.c; C <= ref.e.c; C++) {
+      const headerCell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+      let max = headerCell && headerCell.v != null ? String(headerCell.v).length : 8;
+      for (let R = 1; R <= ref.e.r; R++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (cell && cell.v != null) max = Math.max(max, String(cell.v).length);
+      }
+      colWidths.push({ wch: max + 2 });
+    }
+    ws['!cols'] = colWidths;
+    // Style header row: orange background, white bold text
+    for (let C = ref.s.c; C <= ref.e.c; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (ws[cellRef]) {
+        ws[cellRef].s = {
+          fill: { patternType: 'solid', fgColor: { rgb: 'F97316' } },
+          font: { bold: true, color: { rgb: 'FFFFFF' } },
+        };
+      }
+    }
     XLSX.utils.book_append_sheet(wb, ws, sec.name);
   }
   XLSX.writeFile(wb, `unifi_config_${_exportSite}.xlsx`);
@@ -2954,7 +3179,6 @@ async function loadConfig() {
     if (c.api_site)            _g('creds-api-site').value     = c.api_site;
     if (c.api_username)        _g('creds-api-user').value     = c.api_username;
     if (c.api_password)        _g('creds-api-pass').value     = c.api_password;
-    if (c.api_key)             _g('creds-api-key').value      = c.api_key;
     if (c.ssh_port)            _g('creds-ssh-port').value     = c.ssh_port;
     if (c.udm_ssh_username)    _g('creds-udm-user').value     = c.udm_ssh_username;
     if (c.udm_ssh_password)    _g('creds-udm-pass').value     = c.udm_ssh_password;
@@ -2974,7 +3198,7 @@ async function saveConfig() {
         api_site:             _g('creds-api-site').value.trim() || 'default',
         api_username:         _g('creds-api-user').value.trim(),
         api_password:         _g('creds-api-pass').value,
-        api_key:              _g('creds-api-key').value,
+
         ssh_port:             parseInt(_g('creds-ssh-port').value) || 22,
         udm_ssh_username:     _g('creds-udm-user').value.trim(),
         udm_ssh_password:     _g('creds-udm-pass').value,
