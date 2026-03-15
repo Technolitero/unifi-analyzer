@@ -79,34 +79,56 @@ Credentials are **auto-saved** whenever you click **Analyze**, **Load Config**, 
 
 ### Analyze Tab
 
-Click **Analyze Configuration** to connect to the controller and run a full inspection. Results are grouped by category with color-coded severity badges.
+Click **Analyze Configuration** to connect to the controller and run a full inspection.
 
-**Severity levels:** 🔴 Critical → 🟠 High → 🟡 Medium → 🔵 Low → ℹ️ Info
+#### Layout
+
+Results are structured in two panels:
+
+- **Network** — stat cards for Devices, Clients, Networks, and WLANs with a detail drawer per card
+- **Security & Suggestions** — security summary panel followed by all suggestions; filterable by severity and searchable by keyword
+
+#### Security Summary Panel
+
+| Element | Description |
+|---|---|
+| **Hardening badges** | Green checkmarks for each best-practice that is confirmed active (e.g. IPS enabled, DNS filtering on, hardware offloading on) |
+| **Critical count** | Number of critical-severity suggestions |
+| **Recommended count** | Combined high + medium suggestions |
+| **Informational count** | Combined low + info suggestions |
+
+#### Severity Levels
+
+🔴 Critical → 🟠 High → 🟡 Medium → 🔵 Low → ℹ️ Info
+
+#### Checks Performed
 
 | Category | What is checked |
 |---|---|
-| **Wi-Fi** | WPA3/WPA2 encryption, TKIP detection, PMF (802.11w), 802.11r fast roaming, DTIM period, minimum RSSI thresholds, band steering, hidden SSIDs, channel utilization per radio (>50% warning, >70% critical) |
-| **Devices** | Firmware update availability, offline/unadopted devices, TX power (HIGH = interference risk), channel utilization per AP radio |
-| **Networks** | Guest VLAN presence, IoT VLAN segregation, DHCP lease time (<3600s), MTU (<1500), IPv6 enablement, VLAN segmentation count |
+| **Wi-Fi** | WPA3/WPA2 encryption, TKIP detection, PMF (802.11w), 802.11r fast roaming, DTIM period, minimum RSSI thresholds, band steering enabled/disabled, BSS Transition (802.11v) enabled/disabled, hidden SSIDs, high client density (>30 clients/AP), channel utilization per radio (>50% warning, >70% critical) |
+| **Devices** | Firmware update availability, offline/unadopted devices, TX power (HIGH = interference risk), channel utilization per AP radio, firmware versions (informational — lists all managed devices and their current firmware) |
+| **Networks** | Guest VLAN presence, IoT VLAN segregation, Management VLAN presence, DHCP lease time (<3600s), MTU (<1500), IPv6 enablement, VLAN segmentation count, Proxy ARP on guest/IoT networks, IGMP snooping disabled |
 | **Firewall** | Allow-all rules (no source/destination), disabled orphan rules, logging gaps (>5 accept rules without logging), port forwarding exposure, zone-based policy analysis |
-| **Security** | IDS/IPS mode (detection-only vs. prevention), threat management status |
-| **DNS** | Public resolver usage (8.8.8.8, 1.1.1.1) — recommends split-DNS or NextDNS |
-| **Performance** | Smart Queues / SQM (bufferbloat prevention), hardware offloading |
+| **Security** | IDS/IPS mode — detection-only vs. prevention (critical if off, informational if active with hardening badge); DNS filtering status (informational with hardening badge if on) |
+| **Performance** | Smart Queues / SQM — bufferbloat prevention (informational with hardening badge if on); hardware offloading (informational with hardening badge if on) |
+| **System** | SSH access status (always informational — reports enabled/disabled state and whether password auth is allowed); syslog server configuration (informational with hardening badge if configured); NTP server configuration (informational — lists all configured servers; critical if unconfigured); auto-update status per device (informational — lists which devices have auto-update enabled, disabled, or unknown) |
 
-**Summary tables shown after analysis:**
+> **Passing checks are always visible.** When a setting is correctly configured, it appears as an informational suggestion confirming the active status rather than being silently ignored.
 
-- **Devices** — Name, IP, MAC, Type, Model, Firmware, Status, Mesh (APs with meshing enabled are flagged with a warning badge)
+#### Summary Tables
+
+Shown beneath the suggestions:
+
+- **Devices** — Name, IP, MAC, Type, Model, Firmware, Status, Mesh
 - **Clients** — Hostname, IP, MAC, Manufacturer, Wired/Wireless, Network, Signal, RX/TX
 - **Networks** — Name, Purpose, Subnet, VLAN, Enabled
 - **WLANs** — SSID, Security, Band, VLAN, Hidden, Enabled
-
-Suggestions are filterable by severity and searchable by keyword.
 
 ---
 
 ### Config Lookup Tab
 
-Click **Load Config** to fetch live configuration data from the controller. Data is displayed in 12 section tabs and can be exported to Excel.
+Click **Load Config** to fetch live configuration data from the controller. The section tab bar is hidden until a config is successfully loaded. Data is displayed in 12 section tabs and can be exported to Excel.
 
 #### Sections
 
@@ -122,7 +144,7 @@ Click **Load Config** to fetch live configuration data from the controller. Data
 | **Port Forwards** | Name, Enabled, Protocol, Dst Port, Forward, Forward Port, Source, Interface, Destination IP, Logging |
 | **Port Profiles** | Name + all profile flag columns |
 | **Ports** | Device, Port, Name, Profile, Enabled, Status, Speed, Duplex, Media, POE |
-| **Devices** | Name, Model, IP, MAC, Type, State, Uptime |
+| **Devices** | Name, Model, Firmware, IP, MAC, Type, State, Uptime |
 | **Clients** | Hostname, IP, MAC, Network, Manufacturer, Connection, Uptime |
 
 #### Data Normalizations (applied in tables and exports)
@@ -161,7 +183,7 @@ Click **Load Config** to fetch live configuration data from the controller. Data
 - Column widths auto-fitted to the longest value
 - Same transformations as the table display
 
-**Save to History** — saves the full 12-section Excel workbook to the `history/` directory on the server. The button grays out after saving and re-activates when a new config is loaded. Saved exports are accessible from the **History tab**.
+**Save to History** — saves the full 12-section Excel workbook to the `history/` directory on the server. The button grays out after saving and re-activates when a new config is loaded via **Load Config**. Saved exports are accessible from the **History tab**.
 
 ---
 
@@ -251,17 +273,31 @@ Activated after a capture completes. Displays parsed packet data with:
 - Timeline / chronological view
 - Export filtered subsets as text or download
 
+**Viewer toolbar buttons:**
+
+| Button | Description |
+|---|---|
+| **Copy to Clipboard** | Copies AI-formatted packet text (ready for Claude / ChatGPT) |
+| **Download Text** | Downloads the formatted text report |
+| **Download Raw PCAP** | Downloads the original binary `.pcap` file (shown only when raw data is available) |
+| **Save to History** | Saves the raw `.pcap` to the History tab using the naming convention `{UDM name}-{interface}-{timestamp}.pcap`. Grays out permanently after saving; resets when a new capture is loaded. |
+| **View in PCAP tab** | Switches to the PCAP Capture tab |
+
 ---
 
 ### History Tab
 
-Stores and manages saved configuration exports from the **Config Lookup** tab.
+Stores and manages saved exports from both the **Config Lookup** and **PCAP Viewer** tabs. The History tab contains two independent sections.
 
-#### Saving
+#### Config Exports Section
 
-Click **Save to History** in the Config Lookup export toolbar to save the current full 12-section Excel workbook to the `history/` directory on the server. The button grays out after saving and re-activates when a new config is loaded via **Load Config**.
+Manages saved full-configuration Excel workbooks.
 
-#### History Table
+##### Saving
+
+Click **Save to History** in the Config Lookup export toolbar to save the current 12-section Excel workbook to the `history/` directory. The button grays out after saving and re-activates when a new config is loaded.
+
+##### History Table
 
 | Column | Description |
 |---|---|
@@ -270,7 +306,7 @@ Click **Save to History** in the Config Lookup export toolbar to save the curren
 | Size | File size (KB / MB) |
 | Actions | Per-row Download and Delete buttons |
 
-#### Bulk Actions
+##### Bulk Actions
 
 Select one or more exports using the checkboxes (or **Select All**) to enable:
 
@@ -280,7 +316,7 @@ Select one or more exports using the checkboxes (or **Select All**) to enable:
 | **Download Selected** | Downloads a single `.xlsx` if one file is selected; downloads a `.zip` archive if multiple files are selected |
 | **Delete Selected** | Permanently deletes all selected exports (with confirmation prompt) |
 
-#### Compare Report Format
+##### Compare Report Format
 
 The comparison report is an Excel workbook downloaded as `comparison-{timestamp}.xlsx`:
 
@@ -289,6 +325,34 @@ The comparison report is an Excel workbook downloaded as `comparison-{timestamp}
   - 🟢 Green row — record exists in the latest export but not in that older file (added)
   - 🔴 Red row — record existed in the older file but is absent from the latest (removed)
   - 🟡 Yellow row — record status is mixed across compared files
+
+#### PCAP Captures Section
+
+Manages raw `.pcap` files saved from the PCAP Viewer.
+
+##### Saving
+
+Click **Save to History** in the PCAP Viewer toolbar after a capture completes. The button grays out permanently after saving and resets when a new capture is loaded.
+
+Files are named: `{UDM name}-{interface}-{timestamp}.pcap`
+
+##### PCAP History Table
+
+| Column | Description |
+|---|---|
+| Filename | Capture file name including UDM name, interface, and timestamp |
+| Saved At | Date and time the capture was saved |
+| Size | File size (KB / MB) |
+| Actions | Per-row Download and Delete buttons |
+
+##### Bulk Actions
+
+Select one or more captures using the checkboxes (or **Select All**) to enable:
+
+| Button | Behavior |
+|---|---|
+| **Download Selected** | Downloads a single `.pcap` if one file is selected; downloads a `.zip` archive if multiple files are selected |
+| **Delete Selected** | Permanently deletes all selected captures (with confirmation prompt) |
 
 ---
 
@@ -346,44 +410,3 @@ Available from the Interfaces tab after interfaces are loaded. Streams system lo
 - SSH host keys are auto-accepted (appropriate for a trusted LAN)
 - Do not expose the application port to the internet
 
----
-
-## Architecture
-
-```
-unifi-analyzer/
-├── main.py              # FastAPI backend and all API routes
-├── unifi_client.py      # UniFi Controller REST API client (session-based auth)
-├── config_analyzer.py   # Configuration analysis and suggestion engine
-├── pcap_handler.py      # SSH PCAP capture, parser, and AI formatter
-├── config_export.py     # Configuration export utilities
-├── credentials.py       # AES-encrypted credential storage
-├── app_launcher.py      # Entry point for PyInstaller / macOS app
-├── requirements.txt     # Python dependencies
-├── UnifiAnalyzer.bat    # Windows one-click launcher
-├── install.bat          # Windows service installer (run as Administrator)
-├── uninstall.bat        # Windows service uninstaller
-├── UniFi Analyzer.spec  # PyInstaller build spec
-├── rebuild_mac_app.sh   # macOS app rebuild script
-├── fix_mac_app.sh       # macOS app fix script
-├── history/             # Saved configuration exports (created at runtime)
-├── images/              # Application icons (ICNS, PNG, SVG)
-├── foundry/             # Build artifacts (build/, dist/)
-└── static/
-    └── index.html       # Single-page application (all UI)
-```
-
-### Dependencies
-
-| Package | Purpose |
-|---|---|
-| `fastapi` | Web framework and API routing |
-| `uvicorn` | ASGI server |
-| `python-multipart` | Multipart form upload handling (required for Save to History) |
-| `requests` | HTTP client for UniFi API calls |
-| `urllib3` | Connection pooling and SSL handling |
-| `paramiko` | SSH client for PCAP capture and interface discovery |
-| `pydantic` | Request/response data validation |
-| `cryptography` | AES credential encryption |
-| `pandas` | Data manipulation for config comparison |
-| `openpyxl` | Excel (.xlsx) file generation and diff reports |

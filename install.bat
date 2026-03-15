@@ -162,6 +162,7 @@ for %%f in (
     config_analyzer.py
     config_export.py
     credentials.py
+    unifi_validator.py
     pcap_handler.py
     unifi_client.py
     requirements.txt

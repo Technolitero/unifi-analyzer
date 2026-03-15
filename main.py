@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from unifi_client import UnifiClient
 from config_analyzer import ConfigAnalyzer
-from network_optimizer import NetworkOptimizer
+from unifi_validator import NetworkOptimizer
 from pcap_handler import PcapCapture, format_pcap_for_ai
 from credentials import load_config, save_config
 from config_export import run_export

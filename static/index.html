@@ -1345,32 +1345,32 @@
   <!-- PCAP Viewer options -->
   <div class="tab-opts" id="opts-viewer">
     <span class="badge-count" id="pcapSize" style="flex-shrink:0"></span>
-    <button class="btn btn-copy" id="copyBtn" onclick="copyPcap()">
+    <button class="btn btn-primary" style="width:auto" id="copyBtn" onclick="copyPcap()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
       </svg>
       Copy
     </button>
-    <button class="btn btn-copy" onclick="downloadPcap()">
+    <button class="btn btn-primary" style="width:auto" onclick="downloadPcap()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
       </svg>
       Download .txt
     </button>
-    <button class="btn btn-copy" id="downloadRawBtn" onclick="downloadRawPcap()" style="display:none">
+    <button class="btn btn-primary" style="width:auto;display:none" id="downloadRawBtn" onclick="downloadRawPcap()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
         <circle cx="12" cy="6" r="2" fill="currentColor" stroke="none"/>
       </svg>
       Download .pcap
     </button>
-    <button class="btn btn-copy" id="savePcapHistoryBtn" onclick="savePcapToHistory()" style="display:none">
+    <button class="btn btn-primary" style="width:auto;display:none" id="savePcapHistoryBtn" onclick="savePcapToHistory()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/>
       </svg>
       Save to History
     </button>
-    <button class="btn btn-copy" onclick="switchToTab('pcap')" style="margin-left:auto">
+    <button class="btn btn-primary" style="width:auto;margin-left:auto" onclick="switchToTab('pcap')">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
       Back to Interfaces
     </button>
@@ -3305,7 +3305,12 @@ function renderPcap(results) {
   document.getElementById('pcapText').textContent = pcapText;
   const hasDownload = results.some(r => r.downloadId);
   document.getElementById('downloadRawBtn').style.display    = hasDownload ? 'inline-flex' : 'none';
-  document.getElementById('savePcapHistoryBtn').style.display = hasDownload ? 'inline-flex' : 'none';
+  const saveBtn = document.getElementById('savePcapHistoryBtn');
+  saveBtn.style.display = hasDownload ? 'inline-flex' : 'none';
+  saveBtn.disabled = false;
+  saveBtn.style.opacity = '';
+  saveBtn.style.cursor  = '';
+  saveBtn.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg> Save to History';
   document.getElementById('pcapResults').style.display = 'block';
 
   // Light up and enable the PCAP Viewer tab
@@ -3987,7 +3992,8 @@ async function savePcapToHistory() {
       } catch { failed++; }
     }
     btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20,6 9,17 4,12"/></svg> Saved${saved > 1 ? ` (${saved})` : ''}!`;
-    setTimeout(() => { btn.innerHTML = origHTML; btn.disabled = false; }, 2500);
+    btn.style.opacity = '0.55';
+    btn.style.cursor  = 'not-allowed';
     if (failed) alert(`${failed} capture(s) could not be saved — the raw PCAP data may have expired. Re-run the capture to save.`);
   } catch (err) {
     alert('Save failed: ' + err.message);
