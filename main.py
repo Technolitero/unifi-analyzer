@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from unifi_client import UnifiClient
 from config_analyzer import ConfigAnalyzer
+from network_optimizer import NetworkOptimizer
 from pcap_handler import PcapCapture, format_pcap_for_ai
 from credentials import load_config, save_config
 from config_export import run_export
@@ -164,13 +165,64 @@ async def analyze(params: ConnectionParams):
 
     try:
         config = client.get_all_config()
+        # Enrich with zone-based firewall data (best-effort, newer UniFiOS only)
+        try:
+            config["firewall_zones"] = client.get_firewall_zones_v2_session()
+        except Exception:
+            config["firewall_zones"] = []
+        try:
+            config["firewall_policies"] = client.get_firewall_policies_session()
+        except Exception:
+            config["firewall_policies"] = []
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to retrieve config: {e}")
     finally:
         client.logout()
 
+    # Run both analyzers and merge results
     analyzer = ConfigAnalyzer(config)
-    suggestions = analyzer.analyze()
+    base_suggestions = analyzer.analyze()
+
+    optimizer = NetworkOptimizer(config)
+    opt_result = optimizer.run()
+
+    # Map optimizer 3-tier severity to the UI's 5-tier vocabulary
+    _sev_map = {"critical": "critical", "recommended": "medium", "informational": "info"}
+
+    # Deduplicate: normalize titles by stripping quoted device/SSID names
+    def _norm(title: str) -> str:
+        return re.sub(r"'[^']*'", "*", title.lower()).strip()
+
+    seen_titles = {_norm(s["title"]) for s in base_suggestions}
+    opt_suggestions = []
+    for issue in opt_result["issues"]:
+        mapped_sev = _sev_map.get(issue["severity"], "info")
+        norm = _norm(issue["title"])
+        if norm in seen_titles:
+            continue
+        seen_titles.add(norm)
+        opt_suggestions.append({
+            "category":       issue["category"],
+            "severity":       mapped_sev,
+            "title":          issue["title"],
+            "detail":         issue["detail"],
+            "recommendation": issue["recommendation"],
+        })
+
+    _sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    suggestions = sorted(
+        base_suggestions + opt_suggestions,
+        key=lambda s: _sev_order.get(s["severity"], 9),
+    )
+
+    security_score = {
+        "score":       opt_result["score"],
+        "label":       opt_result["score_label"],
+        "posture":     opt_result["posture"],
+        "description": opt_result["score_description"],
+        "counts":      opt_result["issue_counts"],
+        "hardening":   opt_result["hardening_measures"],
+    }
 
     def _fmt_dev_type(raw_type: str) -> str:
         t = (raw_type or "").lower()
@@ -252,10 +304,36 @@ async def analyze(params: ConnectionParams):
         "wlan_count": len(config.get("wlans", [])),
         "suggestion_count": len(suggestions),
         "suggestions": suggestions,
+        "security_score": security_score,
         "devices": _summarize_devices(config.get("devices", [])),
         "clients": _summarize_clients(config.get("clients", [])),
         "networks": filtered_networks,
         "wlans": _summarize_wlans(config.get("wlans", [])),
+    })
+
+
+@app.post("/api/debug/raw")
+async def debug_raw(params: ConnectionParams):
+    """Return raw settings and a sample device object for field-name debugging."""
+    client = UnifiClient(
+        host=params.host, username=params.username,
+        password=params.password, port=params.port, site=params.site,
+    )
+    try:
+        client.login()
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}")
+    try:
+        settings = client.get_settings()
+        devices  = client.get_devices()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to retrieve data: {e}")
+    finally:
+        client.logout()
+
+    return JSONResponse({
+        "settings": settings,
+        "device_sample": devices[:3],   # first 3 devices only
     })
 
 
@@ -1105,7 +1183,7 @@ async def config_lookup_fetch(
         ],
         "devices": [
             {"name": d.get("name") or d.get("hostname"), "model": d.get("model_name") or d.get("model"),
-             "mac": d.get("mac"), "ip": d.get("ip"), "type": d.get("type"),
+             "firmware": d.get("version"), "mac": d.get("mac"), "ip": d.get("ip"), "type": d.get("type"),
              "state": d.get("state"), "uptime": d.get("uptime")}
             for d in devices_raw if isinstance(d, dict)
         ],
@@ -1328,7 +1406,7 @@ async def preview_export(job_id: str):
 
         devices_raw = _load("stat_device.json")
         devices = [{"name": d.get("name") or d.get("hostname"), "model": d.get("model_name") or d.get("model"),
-                    "mac": d.get("mac"), "ip": d.get("ip"), "type": d.get("type"),
+                    "firmware": d.get("version"), "mac": d.get("mac"), "ip": d.get("ip"), "type": d.get("type"),
                     "state": d.get("state"), "uptime": d.get("uptime")} for d in devices_raw if isinstance(d, dict)]
 
         clients_raw = _load("stat_sta.json")
@@ -1464,22 +1542,45 @@ async def history_save(
     }
 
 
+@app.post("/api/history/save-pcap")
+async def history_save_pcap(
+    file: UploadFile = File(...),
+    udm_name: str = FormField(default="udm"),
+    interface: str = FormField(default="eth0"),
+):
+    """Save a raw PCAP file to the history directory."""
+    HISTORY_DIR.mkdir(exist_ok=True)
+    contents = await file.read()
+    safe_name  = re.sub(r"[^a-zA-Z0-9._-]", "_", udm_name.strip())  or "udm"
+    safe_iface = re.sub(r"[^a-zA-Z0-9._-]", "_", interface.strip()) or "eth0"
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    filename = f"{safe_name}-{safe_iface}-{ts}.pcap"
+    filepath = HISTORY_DIR / filename
+    filepath.write_bytes(contents)
+    return {
+        "filename": filename,
+        "saved_at": ts,
+        "size_bytes": filepath.stat().st_size,
+        "udm_name": safe_name,
+        "interface": safe_iface,
+    }
+
+
 @app.get("/api/history")
 async def history_list():
-    """Return metadata for all saved history files."""
-    if not HISTORY_DIR.exists():
-        return {"files": []}
-    files = []
-    for f in sorted(HISTORY_DIR.glob("*.xlsx"), key=lambda x: x.stat().st_mtime, reverse=True):
+    """Return metadata for all saved history files (xlsx and pcap)."""
+    from datetime import datetime
+    def _meta(f):
         stat = f.stat()
-        from datetime import datetime
-        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-        files.append({
-            "filename": f.name,
-            "saved_at": mtime,
-            "size_bytes": stat.st_size,
-        })
-    return {"files": files}
+        return {"filename": f.name,
+                "saved_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "size_bytes": stat.st_size}
+    if not HISTORY_DIR.exists():
+        return {"files": [], "pcap_files": []}
+    files = [_meta(f) for f in sorted(HISTORY_DIR.glob("*.xlsx"), key=lambda x: x.stat().st_mtime, reverse=True)]
+    pcap_files = [_meta(f) for f in sorted(HISTORY_DIR.glob("*.pcap"), key=lambda x: x.stat().st_mtime, reverse=True)]
+    return {"files": files, "pcap_files": pcap_files}
 
 
 @app.get("/api/history/download/{filename}")
@@ -1488,14 +1589,16 @@ async def history_download(filename: str):
     # Prevent path traversal
     safe = re.sub(r"[^a-zA-Z0-9._-]", "_", filename)
     filepath = HISTORY_DIR / safe
-    if not filepath.exists() or filepath.suffix != ".xlsx":
+    if not filepath.exists() or filepath.suffix not in (".xlsx", ".pcap"):
         raise HTTPException(status_code=404, detail="File not found")
     data = filepath.read_bytes()
+    media = ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+             if filepath.suffix == ".xlsx" else "application/vnd.tcpdump.pcap")
     async def _stream():
         yield data
     return StreamingResponse(
         _stream(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{safe}"'},
     )
 
@@ -1508,7 +1611,7 @@ async def history_delete(body: dict):
     for name in filenames:
         safe = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
         filepath = HISTORY_DIR / safe
-        if filepath.exists() and filepath.suffix == ".xlsx":
+        if filepath.exists() and filepath.suffix in (".xlsx", ".pcap"):
             filepath.unlink()
             deleted.append(safe)
         else:
@@ -1525,7 +1628,7 @@ async def history_download_zip(body: dict):
         for name in filenames:
             safe = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
             filepath = HISTORY_DIR / safe
-            if filepath.exists() and filepath.suffix == ".xlsx":
+            if filepath.exists() and filepath.suffix in (".xlsx", ".pcap"):
                 zf.write(filepath, safe)
     buf.seek(0)
 

@@ -454,6 +454,28 @@
   .sug-rec { font-size: 13px; background: var(--surface2); border-radius: 6px; padding: 8px 12px; border-left: 2px solid var(--accent); }
   .sug-rec::before { content: "Recommendation: "; font-weight: 600; color: var(--accent); }
 
+  /* Optimizer — severity badges & border colors (recommended / informational tiers) */
+  .sug-badge.recommended  { background: rgba(245,158,11,.2); color: var(--warning); }
+  .sug-badge.informational{ background: rgba(96,165,250,.2);  color: var(--info); }
+  .suggestion-item[data-sev="recommended"]  { border-left-color: var(--warning); }
+  .suggestion-item[data-sev="informational"]{ border-left-color: var(--info); }
+  /* Optimizer — filter chips that use data-ocat instead of data-sev */
+  .filter-chip[data-ocat].active { color: var(--text); background: var(--surface2); border-color: var(--accent); }
+  /* Optimizer — score display label colors */
+  .score-excellent       { background: rgba(34,197,94,.15);  color: var(--success); }
+  .score-good            { background: rgba(34,197,94,.1);   color: #86efac; }
+  .score-fair            { background: rgba(245,158,11,.15); color: var(--warning); }
+  .score-needs-attention { background: rgba(239,68,68,.15);  color: var(--danger); }
+  .score-critical        { background: rgba(220,38,38,.2);   color: var(--critical); }
+  /* Optimizer — hardening measure badges */
+  .hardening-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600;
+    background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.25);
+    color: var(--success); white-space: nowrap;
+  }
+  /* Optimizer — score dial */
+
   /* PCAP output */
   .pcap-output-header {
     display: flex;
@@ -1319,6 +1341,7 @@
   <!-- History options (empty — actions are in the panel) -->
   <div class="tab-opts" id="opts-history"></div>
 
+
   <!-- PCAP Viewer options -->
   <div class="tab-opts" id="opts-viewer">
     <span class="badge-count" id="pcapSize" style="flex-shrink:0"></span>
@@ -1340,6 +1363,12 @@
         <circle cx="12" cy="6" r="2" fill="currentColor" stroke="none"/>
       </svg>
       Download .pcap
+    </button>
+    <button class="btn btn-copy" id="savePcapHistoryBtn" onclick="savePcapToHistory()" style="display:none">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/>
+      </svg>
+      Save to History
     </button>
     <button class="btn btn-copy" onclick="switchToTab('pcap')" style="margin-left:auto">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
@@ -1363,6 +1392,9 @@
       <p>Enter your UDM credentials and click "Analyze Configuration" to get started.</p>
     </div>
     <div id="analysisResults" style="display:none">
+
+      <!-- Network section -->
+      <div class="section-header"><h2>Network</h2></div>
       <div class="stats" id="statsRow"></div>
       <div class="stat-detail" id="statDetail">
         <div class="stat-detail-header">
@@ -1375,6 +1407,50 @@
           <table class="stat-detail-table" id="statDetailTable"></table>
         </div>
       </div>
+
+      <!-- Security section — score dial + counts + hardening -->
+      <div id="analyzerSecuritySection" style="display:none;margin-top:8px">
+        <div class="section-header">
+          <h2>Security &amp; Suggestions</h2>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;margin-bottom:16px;align-items:start">
+
+          <!-- Score dial -->
+          <div id="analyzerScoreCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 28px;text-align:center;min-width:150px">
+            <div id="analyzerScoreValue" style="font-size:52px;font-weight:800;line-height:1;color:var(--accent)">—</div>
+            <div style="font-size:11px;color:var(--text-dim);margin:2px 0 10px">/ 100</div>
+            <div id="analyzerScoreLabel" style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;display:inline-block">—</div>
+            <div id="analyzerScoreDesc" style="font-size:10px;color:var(--text-dim);margin-top:8px;line-height:1.4"></div>
+          </div>
+
+          <!-- Issue counts + hardening -->
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div id="analyzerHardeningRow" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
+              <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Hardening Measures Detected</div>
+              <div id="analyzerHardeningList" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+              <div class="stat-card" style="cursor:default">
+                <div class="stat-value" id="analyzerCritCount" style="color:var(--critical)">0</div>
+                <div class="stat-label">Critical Issues</div>
+              </div>
+              <div class="stat-card" style="cursor:default">
+                <div class="stat-value" id="analyzerReccCount" style="color:var(--warning)">0</div>
+                <div class="stat-label">Recommended</div>
+              </div>
+              <div class="stat-card" style="cursor:default">
+                <div class="stat-value" id="analyzerInfoCount" style="color:var(--info)">0</div>
+                <div class="stat-label">Informational</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /analyzerSecuritySection -->
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <!-- Suggestions -->
       <div class="section-header">
         <h2>Suggestions</h2>
         <span class="badge-count" id="suggCount">0</span>
@@ -1388,8 +1464,10 @@
         <button class="filter-chip" data-sev="info" onclick="filterSuggestions('info', this)">Info</button>
       </div>
       <div class="suggestion-list" id="suggList"></div>
-    </div>
-  </div>
+
+    </div><!-- /analysisResults -->
+  </div><!-- /panel-analysis -->
+
 
   <!-- Interfaces panel — table -->
   <div id="panel-interfaces" style="display:none">
@@ -1400,7 +1478,7 @@
   <div id="panel-export" style="display:none;flex-direction:column;gap:0">
 
     <!-- Section tabs row -->
-    <div id="exportSectionTabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);align-items:center">
+    <div id="exportSectionTabs" style="display:none;gap:0;border-bottom:1px solid var(--border);background:var(--surface);align-items:center">
       <button class="export-sec-tab active" data-sec="networks" onclick="switchExportSection('networks')">Networks</button>
       <button class="export-sec-tab" data-sec="wifi" onclick="switchExportSection('wifi')">Wi-Fi</button>
       <button class="export-sec-tab" data-sec="firewall_zones" onclick="switchExportSection('firewall_zones')">Firewall Zones</button>
@@ -1493,6 +1571,50 @@
         <tbody id="historyTableBody"></tbody>
       </table>
     </div>
+
+    <!-- PCAP Captures section -->
+    <div style="margin-top:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:13px;font-weight:600;color:var(--text)">PCAP Captures</span>
+        <div style="display:flex;gap:8px">
+          <button id="pcapHistoryExportSelectedBtn" onclick="exportSelectedPcapHistory()" disabled style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:default;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e;opacity:0.5">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+            Download Selected
+          </button>
+          <button id="pcapHistoryDeleteSelectedBtn" onclick="deleteSelectedPcapHistory()" disabled style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:default;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444;opacity:0.5">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m5 0V4a1 1 0 011-1h2a1 1 0 011 1v2"/></svg>
+            Delete Selected
+          </button>
+          <button onclick="loadPcapHistory()" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="1,4 1,10 7,10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+      <div id="pcapHistoryTableWrap" style="overflow:auto">
+        <div class="empty-state" id="pcapHistoryEmpty" style="display:none">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+            <path d="M9 17H7A5 5 0 017 7h.38M15.73 7H17a5 5 0 010 10h-2M8 12h8"/>
+          </svg>
+          <h3>No saved captures</h3>
+          <p>Use "Save to History" in the PCAP Viewer to save a capture.</p>
+        </div>
+        <table id="pcapHistoryTable" style="display:none;width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+              <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);width:32px">
+                <input type="checkbox" id="pcapHistorySelectAll" onchange="toggleSelectAllPcapHistory(this.checked)" style="cursor:pointer">
+              </th>
+              <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim)">Filename</th>
+              <th style="padding:8px 10px;text-align:left;font-weight:600;color:var(--text-dim);white-space:nowrap">Captured At</th>
+              <th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--text-dim)">Size</th>
+              <th style="padding:8px 10px;text-align:center;font-weight:600;color:var(--text-dim)">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="pcapHistoryTableBody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- PCAP Viewer panel -->
@@ -1545,11 +1667,11 @@ function switchToTab(tab) {
   if (optsPanel) optsPanel.classList.add('active');
 
   // Show/hide main panels
-  document.getElementById('panel-analysis').style.display    = tab === 'analyze'  ? 'block'  : 'none';
-  document.getElementById('panel-interfaces').style.display  = tab === 'pcap'     ? 'block'  : 'none';
-  document.getElementById('panel-pcap').style.display        = tab === 'viewer'   ? 'block'  : 'none';
-  document.getElementById('panel-export').style.display      = tab === 'export'   ? 'flex'   : 'none';
-  document.getElementById('panel-history').style.display     = tab === 'history'  ? 'flex'   : 'none';
+  document.getElementById('panel-analysis').style.display    = tab === 'analyze'   ? 'block'  : 'none';
+  document.getElementById('panel-interfaces').style.display  = tab === 'pcap'      ? 'block'  : 'none';
+  document.getElementById('panel-pcap').style.display        = tab === 'viewer'    ? 'block'  : 'none';
+  document.getElementById('panel-export').style.display      = tab === 'export'    ? 'flex'   : 'none';
+  document.getElementById('panel-history').style.display     = tab === 'history'   ? 'flex'   : 'none';
   if (tab === 'history') loadHistory();
 
   // Device filter bar is only relevant on the Interfaces tab
@@ -1633,7 +1755,7 @@ function renderAnalysis(data) {
     wlans:    data.wlans    || [],
   };
 
-  // Stats — clickable
+  // Stats — clickable inventory cards
   const statsRow = document.getElementById('statsRow');
   statsRow.innerHTML = [
     { value: data.device_count,     label: 'Devices',     key: 'devices'  },
@@ -1646,7 +1768,43 @@ function renderAnalysis(data) {
       <div class="stat-label">${s.label}</div>
     </div>
   `).join('');
+
   closeStatDetail();
+
+  // Populate the Security section (score dial + counts + hardening)
+  const sc = data.security_score;
+  const secSection = document.getElementById('analyzerSecuritySection');
+  if (sc) {
+    const scoreCssClass = _optimizerScoreCss(sc.label);
+    const scoreColor    = _optimizerScoreColor(scoreCssClass);
+
+    const scoreValEl  = document.getElementById('analyzerScoreValue');
+    const scoreLblEl  = document.getElementById('analyzerScoreLabel');
+    const scoreDescEl = document.getElementById('analyzerScoreDesc');
+    scoreValEl.textContent  = sc.score;
+    scoreValEl.style.color  = scoreColor;
+    scoreLblEl.textContent  = sc.posture || sc.label;
+    scoreLblEl.className    = scoreCssClass;
+    scoreDescEl.textContent = sc.description || '';
+
+    const hardenRow  = document.getElementById('analyzerHardeningRow');
+    const hardenList = document.getElementById('analyzerHardeningList');
+    const measures   = (sc.hardening || []).sort();
+    if (measures.length) {
+      hardenList.innerHTML = measures.map(m =>
+        `<span class="hardening-badge">` +
+        `<svg width="9" height="9" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>` +
+        escHtml(m) + `</span>`
+      ).join('');
+      hardenRow.style.display = 'block';
+    } else {
+      hardenRow.style.display = 'none';
+    }
+
+    secSection.style.display = 'block';
+  } else {
+    secSection.style.display = 'none';
+  }
 
   // Count by severity for filter badges
   const sevCounts = {};
@@ -1654,8 +1812,13 @@ function renderAnalysis(data) {
     sevCounts[s.severity] = (sevCounts[s.severity] || 0) + 1;
   }
 
-  // Update filter chips with counts
-  document.querySelectorAll('.filter-chip').forEach(chip => {
+  // Drive Security section counts from merged suggestions (same source as filter chips)
+  document.getElementById('analyzerCritCount').textContent = sevCounts['critical'] || 0;
+  document.getElementById('analyzerReccCount').textContent = (sevCounts['high'] || 0) + (sevCounts['medium'] || 0);
+  document.getElementById('analyzerInfoCount').textContent = (sevCounts['low'] || 0) + (sevCounts['info'] || 0);
+
+  // Update filter chips with counts (scoped to suggFilters to avoid touching optimizer chips)
+  document.querySelectorAll('#suggFilters .filter-chip').forEach(chip => {
     const sev = chip.dataset.sev;
     if (sev === 'all') {
       chip.textContent = `All (${allSuggestions.length})`;
@@ -1678,9 +1841,9 @@ let _activeSevFilter = 'all';
 let _activeStatKey = null;
 
 const STAT_SUGGESTION_CATS = {
-  devices:  ['Devices'],
+  devices:  ['Devices', 'Port Security'],
   clients:  [],
-  networks: ['Networks', 'Firewall', 'DNS'],
+  networks: ['Networks', 'Firewall', 'DNS', 'Security', 'Performance'],
   wlans:    ['WiFi'],
 };
 
@@ -1727,7 +1890,7 @@ function renderStatTable(key, items) {
   };
 
   if (key === 'devices') {
-    const head = `<thead><tr><th>Name</th><th>IP</th><th>Type</th><th>Model</th><th>Version</th><th>MAC</th><th>Status</th><th>Mesh</th></tr></thead>`;
+    const head = `<thead><tr><th>Name</th><th>IP</th><th>Type</th><th>Model</th><th>Firmware</th><th>MAC</th><th>Status</th><th>Mesh</th></tr></thead>`;
     const rows = items.map(d => `<tr>
       <td>${escHtml(d.name || '—')}</td>
       <td>${escHtml(d.ip || '—')}</td>
@@ -1785,7 +1948,7 @@ function renderStatTable(key, items) {
 
 function filterSuggestions(sev, chip) {
   _activeSevFilter = sev;
-  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('#suggFilters .filter-chip').forEach(c => c.classList.remove('active'));
   if (chip) chip.classList.add('active');
   renderSuggestions();
 }
@@ -2250,6 +2413,7 @@ async function runConfigExport() {
   document.getElementById('exportError').textContent = '';
   document.getElementById('exportError').classList.remove('active');
   document.getElementById('exportDownloads').style.display = 'none';
+  document.getElementById('exportSectionTabs').style.display = 'none';
   document.getElementById('exportDataViewer').style.display = 'none';
   document.getElementById('exportOutput').style.display = 'none';
   document.getElementById('exportOutput').textContent = '';
@@ -2330,6 +2494,7 @@ async function runConfigLookup() {
   }
   document.getElementById('exportError').textContent = '';
   document.getElementById('exportError').classList.remove('active');
+  document.getElementById('exportSectionTabs').style.display = 'none';
   document.getElementById('exportDataViewer').style.display = 'none';
   document.getElementById('exportOutput').style.display = 'none';
   document.getElementById('exportProgress').style.display = 'flex';
@@ -2361,6 +2526,7 @@ async function runConfigLookup() {
     renderExportSectionTabs();
     _livePortsData = data.ports || [];
     renderExportTable();
+    document.getElementById('exportSectionTabs').style.display = 'flex';
     document.getElementById('exportDataViewer').style.display = 'flex';
     document.getElementById('exportDataViewer').style.flexDirection = 'column';
     _enableSaveHistoryBtn();
@@ -2386,6 +2552,7 @@ async function loadExportPreview(jobId) {
       renderExportSiteTabs(siteNames);
       renderExportSectionTabs();
       renderExportTable();
+      document.getElementById('exportSectionTabs').style.display = 'flex';
       document.getElementById('exportDataViewer').style.display = 'flex';
       document.getElementById('exportDataViewer').style.flexDirection = 'column';
       _enableSaveHistoryBtn();
@@ -2656,7 +2823,7 @@ function renderExportTable() {
     }
 
   } else if (sec === 'devices') {
-    const cols = ['name', 'model', 'ip', 'mac', 'type', 'state', 'uptime'];
+    const cols = ['name', 'model', 'firmware', 'ip', 'mac', 'type', 'state', 'uptime'];
     html = _buildTable(cols, rows, (c, v) => {
       if (c === 'state') {
         const color = v == 1 ? '#22c55e' : '#ef4444';
@@ -2792,7 +2959,7 @@ function _getSectionConfig(sec, rawRows) {
       return { cols: ['name', 'enabled', 'proto', 'dst_port', 'fwd', 'fwd_port', 'src', 'interface', 'destination_ip', 'logging'],
                transform: (c, v) => (c === 'enabled' || c === 'logging') ? bool(v) : str(v) };
     case 'devices':
-      return { cols: ['name', 'model', 'ip', 'mac', 'type', 'state', 'uptime'],
+      return { cols: ['name', 'model', 'firmware', 'ip', 'mac', 'type', 'state', 'uptime'],
                transform: (c, v) => {
                  if (c === 'state') return v == 1 ? 'Online' : v == 0 ? 'Offline' : str(v);
                  if (c === 'uptime') return v != null ? _humanUptime(v) : '';
@@ -3136,8 +3303,9 @@ function renderPcap(results) {
       `${(totalBytes / 1024).toFixed(1)} KB captured across ${results.length} interfaces`;
   }
   document.getElementById('pcapText').textContent = pcapText;
-  const rawBtn = document.getElementById('downloadRawBtn');
-  rawBtn.style.display = results.some(r => r.downloadId) ? 'inline-flex' : 'none';
+  const hasDownload = results.some(r => r.downloadId);
+  document.getElementById('downloadRawBtn').style.display    = hasDownload ? 'inline-flex' : 'none';
+  document.getElementById('savePcapHistoryBtn').style.display = hasDownload ? 'inline-flex' : 'none';
   document.getElementById('pcapResults').style.display = 'block';
 
   // Light up and enable the PCAP Viewer tab
@@ -3639,7 +3807,8 @@ async function loadHistory() {
     const res = await fetch('/api/history');
     if (!res.ok) throw new Error(`Server error ${res.status}`);
     const data = await res.json();
-    _historyItems = data.files || data || [];
+    _historyItems = data.files || [];
+    _renderPcapHistoryRows(data.pcap_files || []);
     if (!_historyItems.length) {
       table.style.display = 'none';
       empty.style.display = '';
@@ -3788,6 +3957,199 @@ async function deleteHistoryFiles(filenames) {
     alert('Delete failed: ' + err.message);
   }
 }
+
+// ---------------------------------------------------------------------------
+// PCAP History
+// ---------------------------------------------------------------------------
+
+let _pcapHistoryItems = [];
+
+async function savePcapToHistory() {
+  if (!pcapResults || !pcapResults.length) return;
+  const btn = document.getElementById('savePcapHistoryBtn');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Saving…';
+  let saved = 0, failed = 0;
+  try {
+    for (const r of pcapResults) {
+      if (!r.downloadId) continue;
+      try {
+        const dlRes = await fetch(`/api/pcap/download/${r.downloadId}`);
+        if (!dlRes.ok) { failed++; continue; }
+        const blob = await dlRes.blob();
+        const fd = new FormData();
+        fd.append('file', blob, `${r.deviceName || 'udm'}-${r.interface || 'eth0'}.pcap`);
+        fd.append('udm_name',  r.deviceName || 'udm');
+        fd.append('interface', r.interface  || 'eth0');
+        const saveRes = await fetch('/api/history/save-pcap', { method: 'POST', body: fd });
+        if (saveRes.ok) saved++; else failed++;
+      } catch { failed++; }
+    }
+    btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20,6 9,17 4,12"/></svg> Saved${saved > 1 ? ` (${saved})` : ''}!`;
+    setTimeout(() => { btn.innerHTML = origHTML; btn.disabled = false; }, 2500);
+    if (failed) alert(`${failed} capture(s) could not be saved — the raw PCAP data may have expired. Re-run the capture to save.`);
+  } catch (err) {
+    alert('Save failed: ' + err.message);
+    btn.innerHTML = origHTML;
+    btn.disabled = false;
+  }
+}
+
+function _renderPcapHistoryRows(items) {
+  _pcapHistoryItems = items;
+  const tbody  = document.getElementById('pcapHistoryTableBody');
+  const table  = document.getElementById('pcapHistoryTable');
+  const empty  = document.getElementById('pcapHistoryEmpty');
+  const selAll = document.getElementById('pcapHistorySelectAll');
+  if (!items.length) {
+    table.style.display = 'none';
+    empty.style.display = '';
+    return;
+  }
+  table.style.display = 'table';
+  empty.style.display = 'none';
+  selAll.checked = false;
+  tbody.innerHTML = items.map((item, idx) => {
+    const sizeStr = item.size_bytes >= 1048576
+      ? (item.size_bytes / 1048576).toFixed(1) + ' MB'
+      : (item.size_bytes / 1024).toFixed(1) + ' KB';
+    const dateStr = item.saved_at ? item.saved_at.replace('T', ' ').slice(0, 19) : '';
+    const safeFilename = escHtml(item.filename);
+    return `<tr style="border-bottom:1px solid var(--border)" data-filename="${safeFilename}">
+      <td style="padding:8px 10px"><input type="checkbox" class="pcap-history-check" data-idx="${idx}" onchange="updatePcapHistoryBtn()" style="cursor:pointer"></td>
+      <td style="padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--text)">${safeFilename}</td>
+      <td style="padding:8px 10px;white-space:nowrap;color:var(--text-dim)">${escHtml(dateStr)}</td>
+      <td style="padding:8px 10px;text-align:right;color:var(--text-dim);white-space:nowrap">${sizeStr}</td>
+      <td style="padding:8px 10px;text-align:center">
+        <div style="display:inline-flex;gap:6px">
+          <a href="/api/history/download/${encodeURIComponent(item.filename)}" download="${safeFilename}" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;font-weight:600;border-radius:5px;text-decoration:none;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e">
+            <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/></svg>
+            Download
+          </a>
+          <button onclick="deletePcapHistoryFiles(['${item.filename.replace(/'/g, "\\'")}'])" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444">
+            <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m5 0V4a1 1 0 011-1h2a1 1 0 011 1v2"/></svg>
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  updatePcapHistoryBtn();
+}
+
+async function loadPcapHistory() {
+  try {
+    const res = await fetch('/api/history');
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+    _renderPcapHistoryRows(data.pcap_files || []);
+  } catch (err) {
+    document.getElementById('pcapHistoryTableBody').innerHTML =
+      `<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--danger)">Error: ${escHtml(err.message)}</td></tr>`;
+    document.getElementById('pcapHistoryTable').style.display = 'table';
+  }
+}
+
+function updatePcapHistoryBtn() {
+  const checks    = document.querySelectorAll('.pcap-history-check:checked');
+  const allChecks = document.querySelectorAll('.pcap-history-check');
+  document.getElementById('pcapHistorySelectAll').checked = allChecks.length > 0 && checks.length === allChecks.length;
+  ['pcapHistoryExportSelectedBtn', 'pcapHistoryDeleteSelectedBtn'].forEach(id => {
+    const btn = document.getElementById(id);
+    const enabled = checks.length >= 1;
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? '1' : '0.5';
+    btn.style.cursor  = enabled ? 'pointer' : 'default';
+  });
+}
+
+function toggleSelectAllPcapHistory(checked) {
+  document.querySelectorAll('.pcap-history-check').forEach(c => { c.checked = checked; });
+  updatePcapHistoryBtn();
+}
+
+function deleteSelectedPcapHistory() {
+  const filenames = Array.from(document.querySelectorAll('.pcap-history-check:checked'))
+    .map(c => _pcapHistoryItems[+c.dataset.idx].filename);
+  if (!filenames.length) return;
+  deletePcapHistoryFiles(filenames);
+}
+
+async function exportSelectedPcapHistory() {
+  const filenames = Array.from(document.querySelectorAll('.pcap-history-check:checked'))
+    .map(c => _pcapHistoryItems[+c.dataset.idx].filename);
+  if (!filenames.length) return;
+  if (filenames.length === 1) {
+    window.location.href = `/api/history/download/${encodeURIComponent(filenames[0])}`;
+    return;
+  }
+  const btn = document.getElementById('pcapHistoryExportSelectedBtn');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Zipping…';
+  try {
+    const res = await fetch('/api/history/download-zip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filenames }),
+    });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    a.href = url; a.download = `pcap-captures-${ts}.zip`; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Export failed: ' + err.message);
+  } finally {
+    btn.innerHTML = origHTML;
+    updatePcapHistoryBtn();
+  }
+}
+
+async function deletePcapHistoryFiles(filenames) {
+  if (!filenames.length) return;
+  const plural = filenames.length === 1 ? 'this capture' : `these ${filenames.length} captures`;
+  if (!confirm(`Delete ${plural}? This cannot be undone.`)) return;
+  try {
+    const res = await fetch('/api/history', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filenames }),
+    });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    loadPcapHistory();
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Optimizer score helpers (used by renderAnalysis)
+// ---------------------------------------------------------------------------
+
+function _optimizerScoreCss(label) {
+  return {
+    'EXCELLENT':       'score-excellent',
+    'GOOD':            'score-good',
+    'FAIR':            'score-fair',
+    'NEEDS ATTENTION': 'score-needs-attention',
+    'CRITICAL':        'score-critical',
+  }[label] || 'score-fair';
+}
+
+function _optimizerScoreColor(cssClass) {
+  return {
+    'score-excellent':       'var(--success)',
+    'score-good':            '#86efac',
+    'score-fair':            'var(--warning)',
+    'score-needs-attention': 'var(--danger)',
+    'score-critical':        'var(--critical)',
+  }[cssClass] || 'var(--accent)';
+}
+
 
 </script>
 
